@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Message list handling.
  *
@@ -9,12 +9,10 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #include "gamemessagelist.h"
-#include "gamemessage.h"
 
 GameMessageList::~GameMessageList()
 {
@@ -22,20 +20,22 @@ GameMessageList::~GameMessageList()
         GameMessage *current = data;
         data = data->m_next;
         current->m_list = nullptr;
-        Delete_Instance(current);
+        current->Delete_Instance();
     }
 }
 
 void GameMessageList::Append_Message(GameMessage *msg)
 {
+    msg->m_next = nullptr;
+
     if (m_lastMessage != nullptr) {
         m_lastMessage->m_next = msg;
         msg->m_prev = m_lastMessage;
         m_lastMessage = msg;
     } else {
         m_firstMessage = msg;
-        msg->m_prev = nullptr;
         m_lastMessage = msg;
+        msg->m_prev = nullptr;
     }
 
     msg->m_list = this;
@@ -48,12 +48,11 @@ void GameMessageList::Insert_Message(GameMessage *msg, GameMessage *at)
 
     if (at->m_next) {
         at->m_next->m_prev = msg;
-        at->m_next = msg;
     } else {
         m_lastMessage = msg;
-        at->m_next = msg;
     }
 
+    at->m_next = msg;
     msg->m_list = this;
 }
 
@@ -88,25 +87,3 @@ bool GameMessageList::Contains_Message_Of_Type(GameMessage::MessageType type)
 
     return false;
 }
-
-#ifndef THYME_STANDALONE
-void GameMessageList::Append_Message_Nv(GameMessage *msg)
-{
-    GameMessageList::Append_Message(msg);
-}
-
-void GameMessageList::Insert_Message_Nv(GameMessage *msg, GameMessage *at)
-{
-    GameMessageList::Insert_Message(msg, at);
-}
-
-void GameMessageList::Remove_Message_Nv(GameMessage *msg)
-{
-    GameMessageList::Remove_Message(msg);
-}
-
-bool GameMessageList::Contains_Message_Of_Type_Nv(GameMessage::MessageType type)
-{
-    return GameMessageList::Contains_Message_Of_Type(type);
-}
-#endif

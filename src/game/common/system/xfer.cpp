@@ -1,32 +1,28 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: XFER.CPP
-//
-//        Author:: OmniBlade
-//
-//  Contributors:: 
-//
-//   Description:: Some transfer thing interface.
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
-#include "xfer.h"
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief Some data transfer interface?
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
+#include "bitflags.h"
+#include "color.h"
+#include "endiantype.h"
 #include "gamestate.h"
-#include "hooker.h"
 #include "matrix3d.h"
+#include "randomvalue.h"
+#include "science.h"
+#include "upgrade.h"
+#include <captainslog.h>
 
-void Xfer::Open(AsciiString filename)
+void Xfer::Open(Utf8String filename)
 {
     m_filename = filename;
 }
@@ -35,7 +31,8 @@ void Xfer::xferVersion(uint8_t *thing, uint8_t check)
 {
     xferImplementation(thing, sizeof(*thing));
 
-    ASSERT_THROW_PRINT(*thing > check, 0xD, "Xfer version %d greater than expected, %d.\n", *thing, check);
+    captainslog_relassert(
+        *thing <= check, XFER_STATUS_UNKNOWN_VERSION, "Xfer version %d greater than expected, %d.", *thing, check);
 }
 
 void Xfer::xferByte(int8_t *thing)
@@ -55,46 +52,63 @@ void Xfer::xferBool(bool *thing)
 
 void Xfer::xferInt(int32_t *thing)
 {
-    xferImplementation(thing, sizeof(*thing));
+    int32_t temp = htole32(*thing);
+    xferImplementation(&temp, sizeof(temp));
+    *thing = le32toh(temp);
 }
 
 void Xfer::xferInt64(int64_t *thing)
 {
-    xferImplementation(thing, sizeof(*thing));
+    int64_t temp = htole64(*thing);
+    xferImplementation(&temp, sizeof(temp));
+    *thing = le64toh(temp);
 }
 
 void Xfer::xferUnsignedInt(uint32_t *thing)
 {
-    xferImplementation(thing, sizeof(*thing));
+    uint32_t temp = htole32(*thing);
+    xferImplementation(&temp, sizeof(temp));
+    *thing = le32toh(temp);
 }
 
 void Xfer::xferShort(int16_t *thing)
 {
-    xferImplementation(thing, sizeof(*thing));
+    int16_t temp = htole16(*thing);
+    xferImplementation(&temp, sizeof(temp));
+    *thing = le16toh(temp);
 }
 
 void Xfer::xferUnsignedShort(uint16_t *thing)
 {
-    xferImplementation(thing, sizeof(*thing));
+    int16_t temp = htole16(*thing);
+    xferImplementation(&temp, sizeof(temp));
+    *thing = le16toh(temp);
 }
 
 void Xfer::xferReal(float *thing)
 {
-    xferImplementation(thing, sizeof(*thing));
+    static_assert(sizeof(float_int_tp) == sizeof(uint32_t), "Type punning union size is incorrect.");
+    float_int_tp temp;
+    temp.real = *thing;
+    temp.integer = htole32(temp.integer);
+    xferImplementation(&temp, sizeof(temp));
+    temp.integer = le32toh(temp.integer);
+    *thing = temp.real;
 }
 
-void Xfer::xferMarkerLabel(AsciiString thing)
+void Xfer::xferMarkerLabel(Utf8String thing)
 {
+    // Empty
 }
 
-void Xfer::xferAsciiString(AsciiString *thing)
+void Xfer::xferAsciiString(Utf8String *thing)
 {
-    xferImplementation(const_cast<char*>(thing->Str()), thing->Get_Length());
+    xferImplementation(const_cast<char *>(thing->Str()), thing->Get_Length());
 }
 
-void Xfer::xferUnicodeString(UnicodeString *thing)
+void Xfer::xferUnicodeString(Utf16String *thing)
 {
-    xferImplementation(const_cast<wchar_t*>(thing->Str()), thing->Get_Length() * 2);
+    xferImplementation(const_cast<unichar_t *>(thing->Str()), thing->Get_Length() * 2);
 }
 
 void Xfer::xferCoord3D(Coord3D *thing)
@@ -153,9 +167,9 @@ void Xfer::xferRealRange(RealRange *thing)
     xferReal(&thing->hi);
 }
 
-void Xfer::xferColor(int32_t thing)
+void Xfer::xferColor(int32_t *thing)
 {
-    xferInt(&thing);
+    xferInt(thing);
 }
 
 void Xfer::xferRGBColor(RGBColor *thing)
@@ -183,12 +197,12 @@ void Xfer::xferRGBAColorInt(RGBAColorInt *thing)
 
 void Xfer::xferObjectID(ObjectID *thing)
 {
-    xferInt(reinterpret_cast<int32_t*>(thing));
+    xferInt(reinterpret_cast<int32_t *>(thing));
 }
 
 void Xfer::xferDrawableID(DrawableID *thing)
 {
-    xferInt(reinterpret_cast<int32_t*>(thing));
+    xferInt(reinterpret_cast<int32_t *>(thing));
 }
 
 void Xfer::xferSTLObjectIDVector(std::vector<ObjectID> *thing)
@@ -199,17 +213,17 @@ void Xfer::xferSTLObjectIDVector(std::vector<ObjectID> *thing)
     uint16_t count = (uint16_t)thing->size();
     xferUnsignedShort(&count);
 
-    if ( Get_Mode() == XFER_SAVE || Get_Mode() == XFER_CRC ) {
-        for ( auto it = thing->begin(); it != thing->end(); ++it ) {
+    if (Get_Mode() == XFER_SAVE || Get_Mode() == XFER_CRC) {
+        for (auto it = thing->begin(); it != thing->end(); ++it) {
             xferObjectID(&(*it));
         }
     } else {
-        ASSERT_THROW_PRINT(Get_Mode() == XFER_LOAD, 0x8, "Xfer mode unknown.\n");
-        ASSERT_THROW_PRINT(thing->size(), 0xF, "Trying to xfer load to none empty vector.\n");
+        captainslog_relassert(Get_Mode() == XFER_LOAD, XFER_STATUS_UNKNOWN_XFER_MODE, "Xfer mode unknown.");
+        captainslog_relassert(thing->size() == 0, XFER_STATUS_NOT_EMPTY, "Trying to xfer load to none empty vector.");
 
         ObjectID val;
 
-        for ( int i = 0; i < count; ++i ) {
+        for (int i = 0; i < count; ++i) {
             xferObjectID(&val);
             thing->insert(thing->end(), val);
         }
@@ -224,17 +238,17 @@ void Xfer::xferSTLObjectIDList(std::list<ObjectID> *thing)
     uint16_t count = (uint16_t)thing->size();
     xferUnsignedShort(&count);
 
-    if ( Get_Mode() == XFER_SAVE || Get_Mode() == XFER_CRC ) {
-        for ( auto it = thing->begin(); it != thing->end(); ++it ) {
+    if (Get_Mode() == XFER_SAVE || Get_Mode() == XFER_CRC) {
+        for (auto it = thing->begin(); it != thing->end(); ++it) {
             xferObjectID(&(*it));
         }
     } else {
-        ASSERT_THROW_PRINT(Get_Mode() == XFER_LOAD, 0x8, "Xfer mode unknown.\n");
-        ASSERT_THROW_PRINT(thing->size() == 0, 0xF, "Trying to xfer load to none empty vector.\n");
+        captainslog_relassert(Get_Mode() == XFER_LOAD, XFER_STATUS_UNKNOWN_XFER_MODE, "Xfer mode unknown.");
+        captainslog_relassert(thing->size() == 0, XFER_STATUS_NOT_EMPTY, "Trying to xfer load to none empty vector.");
 
         ObjectID val;
 
-        for ( int i = 0; i < count; ++i ) {
+        for (int i = 0; i < count; ++i) {
             xferObjectID(&val);
             thing->insert(thing->end(), val);
         }
@@ -243,7 +257,7 @@ void Xfer::xferSTLObjectIDList(std::list<ObjectID> *thing)
 
 void Xfer::xferSTLIntList(std::list<int32_t> *thing)
 {
-    if ( thing == nullptr ) {
+    if (thing == nullptr) {
         return;
     }
 
@@ -253,17 +267,17 @@ void Xfer::xferSTLIntList(std::list<int32_t> *thing)
     uint16_t count = (uint16_t)thing->size();
     xferUnsignedShort(&count);
 
-    if ( Get_Mode() == XFER_SAVE || Get_Mode() == XFER_CRC ) {
-        for ( auto it = thing->begin(); it != thing->end(); ++it ) {
+    if (Get_Mode() == XFER_SAVE || Get_Mode() == XFER_CRC) {
+        for (auto it = thing->begin(); it != thing->end(); ++it) {
             xferInt(&(*it));
         }
     } else {
-        ASSERT_THROW_PRINT(Get_Mode() == XFER_LOAD, 0x8, "Xfer mode unknown.\n");
-        ASSERT_THROW_PRINT(thing->size() == 0, 0xF, "Trying to xfer load to none empty vector.\n");
+        captainslog_relassert(Get_Mode() == XFER_LOAD, XFER_STATUS_UNKNOWN_XFER_MODE, "Xfer mode unknown.");
+        captainslog_relassert(thing->size() == 0, XFER_STATUS_NOT_EMPTY, "Trying to xfer load to none empty vector.");
 
         int32_t val;
 
-        for ( int i = 0; i < count; ++i ) {
+        for (int i = 0; i < count; ++i) {
             xferInt(&val);
             thing->insert(thing->end(), val);
         }
@@ -272,12 +286,67 @@ void Xfer::xferSTLIntList(std::list<int32_t> *thing)
 
 void Xfer::xferScienceType(ScienceType *thing)
 {
-    // TODO, needs parts of ScienceStore
+    captainslog_dbgassert(thing != nullptr, "xferScienceType - Invalid parameters");
+
+    Utf8String name;
+
+    switch (Get_Mode()) {
+        case XFER_SAVE:
+            name = g_theScienceStore->Get_Internal_Name_From_Science(*thing);
+            xferAsciiString(&name);
+            break;
+        case XFER_LOAD:
+            xferAsciiString(&name);
+
+            *thing = g_theScienceStore->Get_Science_From_Internal_Name(name);
+
+            captainslog_relassert(
+                *thing != SCIENCE_INVALID, XFER_STATUS_NOT_FOUND, "xferScienceType - Unknown science '%s'", name.Str());
+            break;
+        case XFER_CRC:
+            xferImplementation(thing, sizeof(*thing));
+            break;
+        default:
+            captainslog_relassert(false, XFER_STATUS_UNKNOWN_XFER_MODE, "Xfer mode unknown.");
+    }
 }
 
 void Xfer::xferScienceVec(std::vector<ScienceType> *thing)
 {
-    // TODO, needs parts of ScienceStore
+    captainslog_dbgassert(thing != nullptr, "xferScienceVec - Invalid parameters");
+
+    uint8_t ver = 1;
+    xferVersion(&ver, 1);
+    unsigned short count = static_cast<unsigned short>(thing->size());
+    xferUnsignedShort(&count);
+
+    switch (Get_Mode()) {
+        case XFER_SAVE:
+            for (auto it = thing->begin(); it != thing->end(); it++) {
+                ScienceType science = *it;
+                xferScienceType(&science);
+                break;
+            }
+        case XFER_LOAD:
+            if (!thing->empty()) {
+                thing->clear();
+            }
+
+            for (unsigned short j = 0; j < count; j++) {
+                ScienceType t;
+                xferScienceType(&t);
+                thing->push_back(t);
+            }
+            break;
+        case XFER_CRC:
+            for (auto it = thing->begin(); it != thing->end(); it++) {
+                ScienceType science = *it;
+                xferImplementation(&science, sizeof(science));
+            }
+            break;
+        default:
+            captainslog_relassert(false, XFER_STATUS_UNKNOWN_XFER_MODE, "Xfer mode unknown.");
+    }
 }
 
 void Xfer::xferKindOf(KindOfType *thing)
@@ -285,42 +354,92 @@ void Xfer::xferKindOf(KindOfType *thing)
     uint8_t ver = 1;
     xferVersion(&ver, 1);
 
-    AsciiString kind;
+    Utf8String kind;
     const char *kindc;
 
-    switch ( Get_Mode() ) {
+    switch (Get_Mode()) {
         case XFER_SAVE:
-            if ( *thing >= KINDOF_FIRST || *thing < KINDOF_COUNT ) {
-                kind = BitFlags<KINDOF_COUNT>::s_bitNamesList[*thing];
+            if (*thing >= KINDOF_FIRST && *thing < KINDOF_COUNT) {
+                kind = BitFlags<KINDOF_COUNT>::Bit_As_String(*thing);
             }
 
             xferAsciiString(&kind);
 
             break;
-        case XFER_LOAD:
+        case XFER_LOAD: {
             xferAsciiString(&kind);
             kindc = kind.Str();
 
-            for ( int i = 0; BitFlags<KINDOF_COUNT>::s_bitNamesList[i] != nullptr; ++i ) {
-                if ( strcasecmp(kindc, BitFlags<KINDOF_COUNT>::s_bitNamesList[i]) == 0 ) {
-                    *thing = (KindOfType)i;
-                    break;
-                }
+            int i = BitFlags<KINDOF_COUNT>::Get_Single_Bit_From_Name(kindc);
+
+            if (i != -1) {
+                *thing = (KindOfType)i;
             }
 
             break;
+        }
         case XFER_CRC:
             xferImplementation(thing, sizeof(*thing));
             break;
         default:
-            ASSERT_THROW_PRINT(false, 0x8, "Xfer mode unknown.\n");
+            captainslog_relassert(false, XFER_STATUS_UNKNOWN_XFER_MODE, "Xfer mode unknown.");
             break;
     }
 }
 
 void Xfer::xferUpgradeMask(BitFlags<128> *thing)
 {
-    // TODO, needs part of UpgradeCenter
+    uint8_t ver = 1;
+    xferVersion(&ver, 1);
+
+    switch (Get_Mode()) {
+        case XFER_SAVE: {
+            Utf8String name;
+            unsigned short count = 0;
+
+            for (UpgradeTemplate *tmplate = g_theUpgradeCenter->Get_Upgrade_List(); tmplate != nullptr;
+                 tmplate = tmplate->Friend_Get_Next()) {
+                BitFlags<128> mask = tmplate->Get_Upgrade_Mask();
+                if (thing->Test_For_All(mask)) {
+                    count++;
+                }
+            }
+
+            xferUnsignedShort(&count);
+
+            for (UpgradeTemplate *tmplate = g_theUpgradeCenter->Get_Upgrade_List(); tmplate != nullptr;
+                 tmplate = tmplate->Friend_Get_Next()) {
+                BitFlags<128> mask = tmplate->Get_Upgrade_Mask();
+                if (thing->Test_For_All(mask)) {
+                    name = tmplate->Get_Name();
+                    xferAsciiString(&name);
+                }
+            }
+
+            break;
+        }
+        case XFER_LOAD: {
+            Utf8String name;
+            unsigned short count;
+            xferUnsignedShort(&count);
+            thing->Clear();
+
+            for (int i = 0; i < count; i++) {
+                xferAsciiString(&name);
+                const UpgradeTemplate *tmplate = g_theUpgradeCenter->Find_Upgrade(name);
+                captainslog_relassert(
+                    tmplate != nullptr, XFER_STATUS_NOT_FOUND, "Xfer::xferUpgradeMask - Unknown upgrade '%s'", name.Str());
+                thing->Set(tmplate->Get_Upgrade_Mask());
+            }
+
+            break;
+        }
+        case XFER_CRC:
+            xferImplementation(thing, sizeof(*thing));
+            break;
+        default:
+            captainslog_relassert(false, XFER_STATUS_UNKNOWN_XFER_MODE, "Xfer mode unknown.");
+    }
 }
 
 void Xfer::xferUser(void *thing, int size)
@@ -344,15 +463,29 @@ void Xfer::xferMatrix3D(Matrix3D *thing)
     xferReal(&(*thing)[2][3]);
 }
 
-void Xfer::xferMapName(AsciiString *thing)
+void Xfer::xferMapName(Utf8String *thing)
 {
-    AsciiString map;
+    Utf8String map;
 
-    if ( Get_Mode() == XFER_SAVE ) {
+    if (Get_Mode() == XFER_SAVE) {
         map = g_theGameState->Real_To_Portable_Map_Path(*thing);
         xferAsciiString(&map);
-    } else if ( Get_Mode() == XFER_LOAD ) {
+    } else if (Get_Mode() == XFER_LOAD) {
         xferAsciiString(&map);
         *thing = g_theGameState->Portable_To_Real_Map_Path(map);
     }
+}
+
+void Xfer::Xfer_Client_Random_Var(GameClientRandomVariable *thing)
+{
+    xferInt(reinterpret_cast<int32_t *>(&thing->m_type));
+    xferReal(&thing->m_low);
+    xferReal(&thing->m_high);
+}
+
+void Xfer::Xfer_Logic_Random_Var(GameLogicRandomVariable *thing)
+{
+    xferInt(reinterpret_cast<int32_t *>(&thing->m_type));
+    xferReal(&thing->m_low);
+    xferReal(&thing->m_high);
 }

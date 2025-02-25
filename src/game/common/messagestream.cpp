@@ -9,18 +9,25 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #include "messagestream.h"
 #include "commandlist.h"
+#include "gamelogic.h"
 
-#ifndef THYME_STANDALONE
-MessageStream *&g_theMessageStream = Make_Global<MessageStream *>(0x00A29B74);
-#else
+#ifndef GAME_DLL
 MessageStream *g_theMessageStream = nullptr;
 #endif
+
+bool Is_Invalid_Debug_Command(GameMessage::MessageType type)
+{
+#ifndef GAME_DEBUG_STRUCTS
+    // todo later
+#endif
+
+    return false;
+}
 
 MessageStream::~MessageStream()
 {
@@ -41,7 +48,7 @@ MessageStream::~MessageStream()
  */
 GameMessage *MessageStream::Append_Message(GameMessage::MessageType type)
 {
-    GameMessage *msg = new GameMessage(type);
+    GameMessage *msg = NEW_POOL_OBJ(GameMessage, type);
     GameMessageList::Append_Message(msg);
 
     return msg;
@@ -52,7 +59,7 @@ GameMessage *MessageStream::Append_Message(GameMessage::MessageType type)
  */
 GameMessage *MessageStream::Insert_Message(GameMessage::MessageType type, GameMessage *at)
 {
-    GameMessage *msg = new GameMessage(type);
+    GameMessage *msg = NEW_POOL_OBJ(GameMessage, type);
     GameMessageList::Insert_Message(msg, at);
 
     return msg;
@@ -162,12 +169,17 @@ void MessageStream::Propagate_Messages()
     for (TranslatorData *tdata = m_firstTranslator; tdata != nullptr; tdata = tdata->m_next) {
         for (GameMessage *msg = m_firstMessage; msg != nullptr;) {
             GameMessageTranslator *translator = tdata->m_translator;
-            GameMessage *msg_next = msg->Get_Next();
+            GameMessage *msg_next = nullptr;
 
-            if (translator != nullptr) {
-                if (translator->Translate_Game_Message(msg) == DESTROY_MESSAGE) {
-                    Delete_Instance(msg);
+            if (translator != nullptr && !Is_Invalid_Debug_Command(msg->Get_Type())) {
+                GameMessageDisposition disp = translator->Translate_Game_Message(msg);
+                // Translate can change the message so we need to get the next message after calling it.
+                msg_next = msg->Get_Next();
+                if (disp == DESTROY_MESSAGE) {
+                    msg->Delete_Instance();
                 }
+            } else {
+                msg_next = msg->Get_Next();
             }
 
             msg = msg_next;
@@ -178,15 +190,3 @@ void MessageStream::Propagate_Messages()
     m_firstMessage = nullptr;
     m_lastMessage = nullptr;
 }
-
-#ifndef THYME_STANDALONE
-GameMessage *MessageStream::Hook_Append_Message(GameMessage::MessageType type)
-{
-    return MessageStream::Append_Message(type);
-}
-
-GameMessage *MessageStream::Hook_Insert_Message(GameMessage::MessageType type, GameMessage *at)
-{
-    return MessageStream::Insert_Message(type, at);
-}
-#endif

@@ -1,7 +1,8 @@
 /**
  * @file
  *
- * @Author CCHyper, OmniBlade
+ * @author CCHyper
+ * @author OmniBlade
  *
  * @brief Class for handling TARGA images.
  *
@@ -9,20 +10,21 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #include "targa.h"
 #include "ffactory.h"
-#include "gamedebug.h"
-#include "stringex.h"
-
-#ifndef THYME_STANDALONE
-#include "hookcrt.h"
-#else
+#include <captainslog.h>
+#include <cstring>
 #include <malloc.h>
+
+#ifdef GAME_DLL
+#include "hookcrt.h"
 #endif
+
+using std::memcpy;
+using std::memset;
 
 TargaImage::TargaImage() : m_TGAFile(nullptr), m_access(0), m_flags(0), m_image(nullptr), m_palette(nullptr)
 {
@@ -34,12 +36,12 @@ TargaImage::~TargaImage()
 {
     Close();
 
-    if (m_palette != nullptr && m_flags & 2) {
+    if (m_palette != nullptr && (m_flags & TGA_FLAG_PAL_ALLOC)) {
         free(m_palette);
         m_palette = nullptr;
     }
 
-    if (m_image != nullptr && m_flags & 1) {
+    if (m_image != nullptr && (m_flags & TGA_FLAG_IMAGE_ALLOC)) {
         free(m_image);
         m_image = nullptr;
     }
@@ -52,7 +54,7 @@ int TargaImage::Open(const char *name, int mode)
     }
 
     Close();
-    m_flags &= ~8;
+    m_flags &= ~TGA_FLAG_INVALID;
     m_access = mode;
 
     TGA2Footer footer;
@@ -74,17 +76,17 @@ int TargaImage::Open(const char *name, int mode)
             }
 
             // If we don't have the correct footer info, not a TGA file.
-            if (strncasecmp(footer.signature, "TRUEVISION-XFILE", sizeof(footer.signature)) && footer.extension != 0) {
-                m_flags |= 8;
+            if (strncasecmp(footer.signature, "TRUEVISION-XFILE", sizeof(footer.signature)) == 0 && footer.extension != 0) {
+                m_flags |= TGA_FLAG_INVALID;
             }
 
             footer.extension = le32toh(footer.extension);
 
             // If we can't seek to the extension offset or we can't read enough data,
             // not a TGA file.
-            if ((m_flags & 8) != 0
+            if ((m_flags & TGA_FLAG_INVALID) != 0
                 && (File_Seek(footer.extension, FileSeekType::FS_SEEK_START) != -1
-                       || File_Read(&m_extension, sizeof(m_extension) != sizeof(m_extension)))) {
+                    || File_Read(&m_extension, sizeof(m_extension) != sizeof(m_extension)))) {
                 Close();
 
                 return TGA_RET_NOT_TGA;
@@ -187,7 +189,7 @@ int TargaImage::Load(const char *name, int flags, bool invert_image)
                 return TGA_RET_OUT_OF_MEMORY;
             }
 
-            m_flags |= 2;
+            m_flags |= TGA_FLAG_PAL_ALLOC;
         }
     }
 
@@ -209,7 +211,7 @@ int TargaImage::Load(const char *name, int flags, bool invert_image)
                 return TGA_RET_OUT_OF_MEMORY;
             }
 
-            m_flags |= 1;
+            m_flags |= TGA_FLAG_IMAGE_ALLOC;
         }
     }
 
@@ -245,7 +247,7 @@ int TargaImage::Load(const char *name, char *palette, char *image, bool invert_i
 
     if (image != nullptr) {
         int total_bytes = m_header.width * m_header.height * ((m_header.pixel_depth + 7) / 8);
-        
+
         switch (m_header.image_type) {
             case TGA_TYPE_MAPPED:
             case TGA_TYPE_COLOR:
@@ -364,7 +366,7 @@ int TargaImage::Save(const char *name, int flags, bool add_extension)
     // Write the extension if required, if not just write the footer.
     if (add_extension) {
         m_extension.ext_size = sizeof(m_extension);
-        strlcpy(m_extension.software_id, "Thyme Game Engine", sizeof(m_extension.software_id));
+        strlcpy_tpl(m_extension.software_id, "Thyme Game Engine");
         m_extension.software_vers.number = 1;
         m_extension.software_vers.letter = '\0';
         footer.extension = File_Seek(0, FileSeekType::FS_SEEK_CURRENT);
@@ -378,7 +380,7 @@ int TargaImage::Save(const char *name, int flags, bool add_extension)
         footer.extension = 0;
     }
 
-    strlcpy(footer.signature, "TRUEVISION-XFILE", sizeof(footer.signature));
+    strlcpy_tpl(footer.signature, "TRUEVISION-XFILE");
     footer.dot_char = '.';
     footer.null_char = '\0';
 
@@ -399,6 +401,7 @@ void TargaImage::X_Flip()
 
     // Must have at least one row of pixels.
     if (m_header.height <= 0) {
+        captainslog_dbgassert(false, "Image has no pixels.");
         return;
     }
 
@@ -430,11 +433,6 @@ void TargaImage::X_Flip()
 void TargaImage::Y_Flip()
 {
     int pixel_size = (m_header.pixel_depth + 7) / 8;
-
-    // Height must be a multiple of 2 to be flippable.
-    if ((m_header.height % 2) != 0) {
-        return;
-    }
 
     for (int y = 0; y < (m_header.height / 2); ++y) {
         // Set pointers to the start and end rows.
@@ -476,7 +474,6 @@ char *TargaImage::Set_Palette(char *buffer)
     m_palette = buffer;
 
     return old_pal;
-    return nullptr;
 }
 
 int TargaImage::Decode_Image()
@@ -525,6 +522,7 @@ int TargaImage::Decode_Image()
 
 int TargaImage::Encode_Image()
 {
+    // TODO
     return 0;
 }
 
@@ -594,30 +592,30 @@ bool TargaImage::File_Open_ReadWrite(const char *name)
     return false;
 }
 
-int TargaImage::Targa_Error_Handler(int load_err, const char *filename)
+int TargaImage::Error_Handler(int load_err, const char *filename)
 {
     switch (load_err) {
         case TGA_RET_OK:
             return load_err;
 
         case TGA_RET_UNABLE_TO_LOAD:
-            DEBUG_LOG("Targa: Failed to open file \"%s\"\n", filename);
+            captainslog_error("Targa: Failed to open file \"%s\"", filename);
             return load_err;
 
         case TGA_RET_NOT_TGA:
-            DEBUG_LOG("Targa: Failed to read file \"%s\"\n", filename);
+            captainslog_error("Targa: Failed to read file \"%s\"", filename);
             return load_err;
 
         case TGA_RET_UNSUPPORTED:
-            DEBUG_LOG("Targa: File \"%s\" is an unsupported Targa type\n", filename);
+            captainslog_error("Targa: File \"%s\" is an unsupported Targa type", filename);
             return load_err;
 
         case TGA_RET_OUT_OF_MEMORY:
-            DEBUG_LOG("Targa: Failed to allocate memory for file \"%s\"\n", filename);
+            captainslog_error("Targa: Failed to allocate memory for file \"%s\"", filename);
             return load_err;
 
         default:
-            DEBUG_LOG("Targa: Unknown error when loading file '%s'\n", filename);
+            captainslog_error("Targa: Unknown error when loading file '%s'", filename);
             return load_err;
     }
 }

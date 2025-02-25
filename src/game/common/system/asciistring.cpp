@@ -1,301 +1,366 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: ASCIISTRING.CPP
-//
-//        Author:: CCHyper
-//
-//  Contributors:: OmniBlade
-//
-//   Description:: 
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
-
-
-////////////////////////////////////////////////////////////////////////////////
-//  Includes
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief Class for handling strings that have a series of bytes as a code point.
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #include "asciistring.h"
 #include "endiantype.h"
-#include "gamedebug.h"
+#include "errorcodes.h"
+#include "memdynalloc.h"
 #include "unicodestring.h"
+#include <captainslog.h>
 #include <cctype>
 #include <cstdio>
+#if defined PLATFORM_WINDOWS
+#include <utf.h>
+#endif
 
-AsciiString const AsciiString::s_emptyString(nullptr);
+Utf8String const Utf8String::s_emptyString(nullptr);
 
-AsciiString::AsciiString() :
-    m_data(nullptr)
+/**
+ * Default constructor added for convenience
+ */
+Utf8String::Utf8String() : m_data(nullptr) {}
+
+/**
+ * Initializes this string with an existing string (copy) and increments reference count.
+ */
+Utf8String::Utf8String(Utf8String const &string) : m_data(string.m_data)
 {
+    if (m_data != nullptr) {
+        m_data->Inc_Ref_Count();
+    }
 }
 
-AsciiString::AsciiString(const char *s) :
-    m_data(nullptr)
+/**
+ * Initializes this string with a reference to the start of a char array.
+ */
+Utf8String::Utf8String(const char *s) : m_data(nullptr)
 {
-    if ( s != nullptr ) {
-        int len = (int)strlen(s);
-        if ( len > 0 ) {
+    if (s != nullptr) {
+        // Get length of the string that was passed
+        const size_type len = static_cast<size_type>(strlen(s));
+        if (len > 0) {
+            // Allocate a buffer
             Ensure_Unique_Buffer_Of_Size(len + 1, false, s);
         }
     }
 }
 
-AsciiString::AsciiString(AsciiString const &string) :
-    m_data(string.m_data)
+/**
+ * A utility method to test nullptr on string content and log if that happens
+ */
+const char *Utf8String::Peek() const
 {
-    if ( m_data != nullptr ) {
-        m_data->Inc_Ref_Count();
-    }
-}
+    captainslog_dbgassert(m_data != nullptr, "null string ptr");
 
-void AsciiString::Validate()
-{
-    //TODO, doesnt seem to be implimented anywhere? It is called though...
-}
-
-char *AsciiString::Peek() const
-{
-    ASSERT_PRINT(m_data != nullptr, "null string ptr");
-    
     return m_data->Peek();
 }
 
-
-void AsciiString::Release_Buffer()
+/**
+ * A utility method to test nullptr on string content and log if that happens
+ */
+char *Utf8String::Peek()
 {
-    if ( m_data != nullptr ) {
-        m_data->Dec_Ref_Count();
+    captainslog_dbgassert(m_data != nullptr, "null string ptr");
 
-        if ( m_data->ref_count == 0 ) {
-            g_dynamicMemoryAllocator->Free_Bytes(m_data);
-        }
-        
-        m_data = nullptr;
-    }
+    return m_data->Peek();
 }
 
-void AsciiString::Ensure_Unique_Buffer_Of_Size(int chars_needed, bool keep_data, const char *str_to_cpy, const char *str_to_cat)
+/**
+ * Internal shorthand to decrement the reference count and release buffer if 0
+ */
+void Utf8String::Release_Buffer()
 {
-    if ( m_data != nullptr && m_data->ref_count == 1 && m_data->num_chars_allocated >= chars_needed ) {
-        if ( str_to_cpy != nullptr ) {
-            strcpy(Peek(), str_to_cpy);
+    Validate();
+
+    if (m_data != nullptr) {
+        m_data->Dec_Ref_Count();
+        if (m_data->ref_count == 0) {
+            Free_Bytes();
+        }
+        m_data = nullptr;
+    }
+
+    Validate();
+}
+
+/**
+ * Frees the allocated memory for this string. Thanks for all the fish!
+ */
+void Utf8String::Free_Bytes()
+{
+    g_dynamicMemoryAllocator->Free_Bytes(m_data);
+}
+
+/**
+ * Allocates a memory buffer for a string's content.
+ */
+void Utf8String::Ensure_Unique_Buffer_Of_Size(
+    size_type chars_needed, bool keep_data, const char *str_to_cpy, const char *str_to_cat)
+{
+    Validate();
+
+    if (m_data != nullptr && m_data->ref_count == 1 && m_data->num_chars_allocated >= chars_needed) {
+        if (str_to_cpy != nullptr) {
+            // #BUGFIX Originally uses strcpy here. Use memmove to support overlaps gracefully.
+            captainslog_dbgassert(strlen(str_to_cpy) == chars_needed - 1, "Length does not match");
+            memmove(Peek(), str_to_cpy, chars_needed * sizeof(value_type));
         }
 
-        if ( str_to_cat != nullptr ) {
-            strcpy(Peek() + strlen(Peek()), str_to_cat);
+        if (str_to_cat != nullptr) {
+            strcat(Peek(), str_to_cat);
         }
 
     } else {
+        const int required_size = chars_needed + sizeof(AsciiStringData);
 
-        //this block would have been a macro like DEBUG_CRASH(numCharsNeeded + 8 > MAX_LEN, THROW_02); (see cl_debug.h)
-        //if ( numCharsNeeded + 8 > MAX_LEN ) {
-            // *&preserveData = 0xDEAD0002;
-            //throw(&preserveData, &_TI1_AW4ErrorCode__);
-        //}
+        captainslog_relassert(required_size <= MAX_LEN, CODE_02, "Size exceeds max len");
 
-        int size = g_dynamicMemoryAllocator->Get_Actual_Allocation_Size(chars_needed + sizeof(AsciiStringData));
-        AsciiStringData *new_data = reinterpret_cast<AsciiStringData *>(g_dynamicMemoryAllocator->Allocate_Bytes_No_Zero(size));
-        
+        const int alloc_size = g_dynamicMemoryAllocator->Get_Actual_Allocation_Size(required_size);
+        AsciiStringData *new_data =
+            reinterpret_cast<AsciiStringData *>(g_dynamicMemoryAllocator->Allocate_Bytes_No_Zero(alloc_size));
+
         new_data->ref_count = 1;
-        new_data->num_chars_allocated = size - sizeof(AsciiStringData);
-        //new_data->num_chars_allocated = numCharsNeeded;
-    #ifdef GAME_DEBUG_STRUCTS
+        new_data->num_chars_allocated = alloc_size - sizeof(AsciiStringData);
+#ifdef GAME_DEBUG_STRUCTS
         new_data->debug_ptr = new_data->Peek();
-    #endif
+#endif
 
-        if ( m_data != nullptr && keep_data ) {
+        if (m_data != nullptr && keep_data) {
             strcpy(new_data->Peek(), Peek());
         } else {
             *new_data->Peek() = '\0';
         }
 
-        if ( str_to_cpy != nullptr ) {
+        if (str_to_cpy != nullptr) {
             strcpy(new_data->Peek(), str_to_cpy);
         }
 
-        if ( str_to_cat != nullptr ) {
+        if (str_to_cat != nullptr) {
             strcat(new_data->Peek(), str_to_cat);
         }
 
         Release_Buffer();
         m_data = new_data;
+        Validate();
     }
 }
 
-int AsciiString::Get_Length() const
+/**
+ * Gets the length of the string
+ */
+Utf8String::size_type Utf8String::Get_Length() const
 {
-    if ( m_data != nullptr ) {
-        int len = strlen(Str());
-        ASSERT_PRINT(len > 0, "length of string is less than or equal to 0.");
-        
+    if (m_data != nullptr) {
+        const size_type len = static_cast<size_type>(strlen(Str()));
+        captainslog_dbgassert(len > 0, "length of string is less than or equal to 0.");
+
         return len;
     }
-    
+
     return 0;
 }
 
-char AsciiString::Get_Char(int index) const
+char Utf8String::Get_Char(size_type index) const
 {
-    ASSERT_PRINT(index >= 0, "bad index in getCharAt.");
-    ASSERT_PRINT(Get_Length() > 0, "strlen returned less than or equal to 0 in getCharAt.");
-    
+    captainslog_dbgassert(index >= 0, "Index must be equal or larger than 0.");
+    captainslog_dbgassert(index < Get_Length(), "Index must be smaller than length.");
+
     return Peek()[index];
 }
 
-const char *AsciiString::Str() const
+/**
+ * This is effectively ToString() It is in original code, but never called.
+ */
+const char *Utf8String::Str() const
 {
     static char const TheNullChr[4] = "";
 
-    if ( m_data != nullptr ) {
+    if (m_data != nullptr) {
         return Peek();
     }
-    
+
     return TheNullChr;
 }
 
-char *AsciiString::Get_Buffer_For_Read(int len)
+/**
+ * Generates a buffer with the requested length for reading and returns it.
+ */
+char *Utf8String::Get_Buffer_For_Read(size_type len)
 {
-    ASSERT_PRINT(len > 0, "No need to allocate 0 len strings.");
-    
-    //
-    // Generate buffer sufficient to read requested size into.
-    //
-    Ensure_Unique_Buffer_Of_Size(len + 1, 0, 0, 0);
-
+    Ensure_Unique_Buffer_Of_Size(len + 1, false, nullptr, nullptr);
     return Peek();
 }
 
-void AsciiString::Set(const char *s)
+/**
+ * Set this string content to a new string
+ */
+void Utf8String::Set(const char *str)
 {
-    if ( m_data == nullptr || s != m_data->Peek() ) {
-        size_t len;
-        
-        if ( s && (len = strlen(s) + 1, len != 1) ) {
-            Ensure_Unique_Buffer_Of_Size(len, false, s, nullptr);
+    if (m_data == nullptr || str != m_data->Peek()) {
+        const size_type len = str ? static_cast<size_type>(strlen(str)) : 0;
+
+        if (len != 0) {
+            Ensure_Unique_Buffer_Of_Size(len + 1, false, str, nullptr);
         } else {
             Release_Buffer();
         }
     }
 }
 
-void AsciiString::Set(AsciiString const &string)
+/**
+ * A convenience version of Set. Not found in original code.
+ */
+void Utf8String::Set(Utf8String const &string)
 {
-    if ( &string != this ) {
+    if (&string != this) {
         Release_Buffer();
         m_data = string.m_data;
-        
-        if ( m_data != nullptr ) {
+
+        if (m_data != nullptr) {
             m_data->Inc_Ref_Count();
         }
     }
 }
 
-void AsciiString::Translate(UnicodeString const &string)
+/**
+ * Converts a Utf16 string to Utf8
+ */
+void Utf8String::Translate_Internal(const unichar_t *utf16_string, const size_type utf16_len)
 {
     Release_Buffer();
-    
-    int str_len = string.Get_Length();
 
-    for ( int i = 0; i < str_len; ++i ) {
-        //This is a debug assert from the look of it.
-        /*if ( v4 < 8 || (!stringSrc.m_data ? (v6 = 0) : (v5 = stringSrc.Peek(), v6 = wcslen(v5)), v3 >= v6) )
-        {
-            if ( `UnicodeString::Get_Char'::`14'::allowCrash )
-            {
-                TheCurrentAllowCrashPtr = &`UnicodeString::Get_Char'::`14'::allowCrash;
-                DebugCrash(aBadIndexInGetch);
-                TheCurrentAllowCrashPtr = 0;
+#if defined BUILD_WITH_ICU
+    // Use ICU converters.
+    if (utf16_len > 0) {
+        int32_t utf8_len;
+        UErrorCode error = U_ZERO_ERROR;
+        // Get utf8 string length.
+        u_strToUTF8(nullptr, 0, &utf8_len, utf16_string, utf16_len, &error);
+
+        if (U_SUCCESS(error) && utf8_len > 0) {
+            // Allocate and fill new utf8 string.
+            char *utf8_buffer = Get_Buffer_For_Read(utf8_len);
+            u_strToUTF8(utf8_buffer, utf8_len, nullptr, utf16_string, utf16_len, &error);
+
+            if (U_FAILURE(error)) {
+                Clear();
+            } else {
+                // Add null terminator manually.
+                utf8_buffer[utf8_len] = '\0';
             }
-        }*/
-        wchar_t c;
-
-        if ( string.m_data != nullptr ) {
-            c = string.Get_Char(i);
-        } else {
-            c = L'\0';
         }
-        
-        // null out the second byte so Concat only concatenates the first byte.
-        // prevents issues if unicode string contains none ascii chars.
-        // This will have endian issues on big endian.
-        c &= 0xFF;
-
-#ifdef SYSTEM_BIG_ENDIAN
-        // Byte swap if on big endian, only care about least significant byte
-        if (sizeof(wchar_t) == 2) {
-            c = htole16(c);
-        } else if (sizeof(wchar_t) == 4) {
-            c = htole32(c);
-        } else {
-            DEBUG_ASSERT_PRINT(false, "wchar_t is not an expected size.\n");
-        }
-#endif
-
-        Concat(reinterpret_cast<char *>(&c));
     }
+#elif defined PLATFORM_WINDOWS
+    // Use WIN32 API converters.
+    if (utf16_len > 0) {
+        // Get utf8 string length.
+        const size_type utf8_len = WideCharToMultiByte(CP_UTF8, 0, utf16_string, utf16_len, nullptr, 0, nullptr, nullptr);
+
+        if (utf8_len > 0) {
+            // Allocate and fill new utf8 string.
+            char *utf8_buffer = Get_Buffer_For_Read(utf8_len);
+            WideCharToMultiByte(CP_UTF8, 0, utf16_string, utf16_len, utf8_buffer, utf8_len, nullptr, nullptr);
+
+            // Add null terminator manually.
+            utf8_buffer[utf8_len] = '\0';
+        }
+    }
+#else
+    // Naive copy, this is what the original does.
+    for (size_type i = 0; i < utf16_len; ++i) {
+        unichar_t u = utf16_string[i];
+        // FEATURE: Append ? character for non ASCII characters
+        if (u > 127)
+            u = U_CHAR('?');
+        Concat(static_cast<char>(u));
+    }
+#endif
 }
 
-void AsciiString::Concat(char c)
+void Utf8String::Translate(Utf16String const &utf16_string)
+{
+    Translate_Internal(utf16_string.Str(), utf16_string.Get_Length());
+}
+
+void Utf8String::Translate(const unichar_t *utf16_string)
+{
+    const size_type utf16_len = static_cast<size_type>(u_strlen(utf16_string));
+    Translate_Internal(utf16_string, utf16_len);
+}
+
+/**
+ * Convenience concat for 1 char. Not in original code.
+ */
+void Utf8String::Concat(char c)
 {
     char str[2];
- 
+
     str[0] = c;
     str[1] = '\0';
     Concat(str);
 }
 
-void AsciiString::Concat(const char *s)
+/**
+ * The original concat as it was in original code.
+ */
+void Utf8String::Concat(const char *s)
 {
-    int len = strlen(s);
+    const size_type add_len = static_cast<size_type>(strlen(s));
 
-    if ( len > 0 ) {
-        if ( m_data != nullptr ) {
-            Ensure_Unique_Buffer_Of_Size(strlen(Peek()) + len + 1, true, 0, s);
+    if (add_len > 0) {
+        if (m_data != nullptr) {
+            const size_type cur_len = strlen(Peek());
+            Ensure_Unique_Buffer_Of_Size(cur_len + add_len + 1, true, nullptr, s);
         } else {
             Set(s);
         }
     }
 }
 
-void AsciiString::Trim()
+/**
+ * Trims this string to remove all leading and trailing spaces
+ */
+void Utf8String::Trim()
 {
     // No string, no Trim.
-    if ( m_data == nullptr ) {
+    if (m_data == nullptr) {
         return;
     }
 
     char *str = Peek();
 
     // Find first none space in string if not the first.
-    for ( char i = *str; i != '\0'; i = *(++str) ) {
-        if ( !isspace(i) ) {
+    for (char i = *str; i != '\0'; i = *(++str)) {
+        if (!isspace(i)) {
             break;
         }
     }
 
     // If we had some spaces and moved Str, Set string to that position.
-    if ( str != Peek() ) {
+    if (str != Peek()) {
         Set(str);
     }
 
     // Oops, Set call broke the string.
-    if ( m_data == nullptr ) {
+    if (m_data == nullptr) {
         return;
     }
 
-    for ( int i = strlen(Peek()) - 1; i >= 0; --i ) {
-        if ( !isspace(Get_Char(i)) ) {
+    const size_type len = static_cast<size_type>(strlen(Peek()));
+
+    for (size_type i = len - 1; i >= 0; --i) {
+        if (!isspace(Get_Char(i))) {
             break;
         }
 
@@ -303,226 +368,302 @@ void AsciiString::Trim()
     }
 }
 
-void AsciiString::To_Lower()
+/**
+ * Converts this string to lower case
+ */
+void Utf8String::To_Lower()
 {
-    char buf[MAX_FORMAT_BUF_LEN];
+    // Size specifically matches original code for compatibility.
+    char buf[MAX_TO_LOWER_BUF_LEN];
 
-    if ( m_data == nullptr ) {
+    if (m_data == nullptr) {
         return;
     }
 
     strcpy(buf, Peek());
 
-    for ( char *c = buf; *c != '\0'; ++c ) {
+    for (char *c = buf; *c != '\0'; ++c) {
         *c = tolower(*c);
     }
 
     Set(buf);
 }
 
-// Sanitize the path to use all forward slashes for cross platform
-// compat. Ideally we call this immediately on reading a path from the OS
-// or config file and everything else assumes it, but until we control all
-// path inputs, we need to do this everywhere paths are compared.
-void AsciiString::Fix_Path()
+/**
+ * @brief Convert any windows path separators to posix ('\' to '/').
+ */
+Utf8String Utf8String::Posix_Path() const
 {
     char buf[MAX_FORMAT_BUF_LEN];
 
-    if ( m_data == nullptr ) {
-        return;
+    if (m_data == nullptr) {
+        return s_emptyString;
     }
 
     strcpy(buf, Peek());
 
-    for ( char *c = buf; *c != '\0'; ++c ) {
-        if ( *c == '\\' ) {
+    for (char *c = buf; *c != '\0'; ++c) {
+        if (*c == '\\') {
             *c = '/';
         }
     }
 
-    Set(buf);
+    return buf;
 }
 
-void AsciiString::Remove_Last_Char()
+/**
+ * @brief Convert any posix path separators to windows ('/' to '\').
+ */
+Utf8String Utf8String::Windows_Path() const
 {
-    if ( m_data == nullptr ) {
+    char buf[MAX_FORMAT_BUF_LEN];
+
+    if (m_data == nullptr) {
+        return s_emptyString;
+    }
+
+    strcpy(buf, Peek());
+
+    for (char *c = buf; *c != '\0'; ++c) {
+        if (*c == '/') {
+            *c = '\\';
+        }
+    }
+
+    return buf;
+}
+
+/**
+ * Removes the last character from a string
+ */
+void Utf8String::Remove_Last_Char()
+{
+    if (m_data == nullptr) {
         return;
     }
 
-    int len = strlen(Peek());
+    const size_type len = static_cast<size_type>(strlen(Peek()));
 
-    if ( len > 0 ) {
+    if (len > 0) {
         Ensure_Unique_Buffer_Of_Size(len + 1, true);
         Peek()[len - 1] = '\0';
     }
 }
 
-void AsciiString::Format(const char *format, ...)
+/**
+ * Forms a string from parameters to print to console.
+ */
+void Utf8String::Format(const char *format, ...)
 {
     va_list va;
 
     va_start(va, format);
     Format_VA(format, va);
+    va_end(va);
 }
 
-void AsciiString::Format(AsciiString format, ...)
+/**
+ * Forms a string from parameters to print to console.
+ */
+void Utf8String::Format(Utf8String format, ...)
 {
     va_list va;
 
     va_start(va, format);
     Format_VA(format, va);
+    va_end(va);
 }
 
-void AsciiString::Format_VA(const char *format, va_list args)
+/**
+ * Prints a string to console for a capped length.
+ */
+void Utf8String::Format_VA(const char *format, va_list args)
 {
     char buf[MAX_FORMAT_BUF_LEN];
 
-    ASSERT_THROW_PRINT(vsnprintf(buf, sizeof(buf), format, args) > 0, 0xDEAD0002, "Unable to format buffer");
+    const size_type res = vsnprintf(buf, ARRAY_SIZE(buf), format, args);
+    captainslog_relassert(res > 0, 0xDEAD0002, "Unable to format buffer");
 
     Set(buf);
 }
 
-void AsciiString::Format_VA(AsciiString &format, va_list args)
+/**
+ * Prints a string to console for a capped length. Format_VA variant for convenience. Not used in original code.
+ */
+void Utf8String::Format_VA(Utf8String &format, va_list args)
 {
     char buf[MAX_FORMAT_BUF_LEN];
-
-    ASSERT_THROW_PRINT(vsnprintf(buf, sizeof(buf), format.Str(), args) > 0, 0xDEAD0002, "Unable to format buffer");
+    const size_type res = vsnprintf(buf, ARRAY_SIZE(buf), format.Str(), args);
+    captainslog_relassert(res > 0, 0xDEAD0002, "Unable to format buffer");
 
     Set(buf);
 }
 
-bool AsciiString::Starts_With(const char *p) const
+/**
+ *  Checks if string starts with *p
+ */
+bool Utf8String::Starts_With(const char *p) const
 {
-    if ( *p == '\0' ) {
+    if (*p == '\0') {
         return true;
     }
-    
-    int thislen = m_data != nullptr ? strlen(Peek()) : 0;
-    int thatlen = strlen(p);
-    
-    if ( thislen < thatlen ) {
+    // early out if our string is shorter than the input one
+    const size_type thislen = m_data != nullptr ? static_cast<size_type>(strlen(Peek())) : 0;
+    const size_type thatlen = static_cast<size_type>(strlen(p));
+
+    if (thislen < thatlen) {
         return false;
     }
-    
+
     return strncmp(Peek(), p, thatlen) == 0;
 }
 
-bool AsciiString::Ends_With(const char *p) const
+/**
+ *  Checks if string ends with *p
+ */
+bool Utf8String::Ends_With(const char *p) const
 {
-    if ( *p == '\0' ) {
+    if (*p == '\0') {
         return true;
     }
-    
-    int thislen = m_data != nullptr ? strlen(Peek()) : 0;
-    int thatlen = strlen(p);
-    
-    if ( thislen < thatlen ) {
+    // early out if our string is shorter than the input one
+    const size_type thislen = m_data != nullptr ? static_cast<size_type>(strlen(Peek())) : 0;
+    const size_type thatlen = static_cast<size_type>(strlen(p));
+
+    if (thislen < thatlen) {
         return false;
     }
-    
+    // compare strings
     return strncmp(Peek() + thislen - thatlen, p, thatlen) == 0;
 }
 
-bool AsciiString::Starts_With_No_Case(const char *p) const
+/**
+ *  Checks if string starts with *p, not case sensitive
+ */
+bool Utf8String::Starts_With_No_Case(const char *p) const
 {
-    if ( *p == '\0' ) {
+    if (*p == '\0') {
         return true;
     }
-    
-    int thislen = m_data != nullptr ? strlen(Peek()) : 0;
-    int thatlen = strlen(p);
-    
-    if ( thislen < thatlen ) {
+    // early out if our string is shorter than the input one
+    const size_type thislen = Get_Length();
+    const size_type thatlen = static_cast<size_type>(strlen(p));
+
+    if (thislen < thatlen) {
         return false;
     }
-    
+
     return strncasecmp(Peek(), p, thatlen) == 0;
 }
 
-bool AsciiString::Ends_With_No_Case(const char *p) const
+/**
+ *  Checks if string ends with *p, not case sensitive
+ */
+bool Utf8String::Ends_With_No_Case(const char *p) const
 {
-    if ( *p == '\0' ) {
+    if (*p == '\0') {
         return true;
     }
-    
-    int thislen = m_data != nullptr ? strlen(Peek()) : 0;
-    int thatlen = strlen(p);
-    
-    if ( thislen < thatlen ) {
+
+    const size_type thislen = m_data != nullptr ? static_cast<size_type>(strlen(Peek())) : 0;
+    const size_type thatlen = static_cast<size_type>(strlen(p));
+
+    if (thislen < thatlen) {
         return false;
     }
-    
+
     return strncasecmp(Peek() + thislen - thatlen, p, thatlen) == 0;
 }
 
-bool AsciiString::Next_Token(AsciiString *tok, const char *delims)
+/**
+ * Find the next tokens and loads *tok with the string between these token
+ * The string this is used on is consumed in the process. (a primitive string split)
+ */
+bool Utf8String::Next_Token(Utf8String *tok, const char *delims)
 {
-    if ( m_data == nullptr ) {
+    if (m_data == nullptr) {
         return false;
     }
-    
-    if ( *Peek() == '\0' || this == tok ) {
+
+    if (*Peek() == '\0' || this == tok) {
         return false;
     }
-    
+
     //
     // If no separators provided, default to white space.
     //
-    if ( delims == nullptr ) {
+    if (delims == nullptr) {
         delims = " \n\r\t";
     }
-    
+
     char *start = Peek();
-    
+
     //
     // Find next instance of token or end of string
     //
-    for ( char c = *start; c != '\0'; c = *(++start) ) {
-        if ( strchr(delims, c) == nullptr ) {
+    for (char c = *start; c != '\0'; c = *(++start)) {
+        if (strchr(delims, c) == nullptr) {
             break;
         }
     }
-    
-    if ( *start == '\0' ) {
+
+    if (*start == '\0') {
         Release_Buffer();
         tok->Release_Buffer();
-        
+
         return false;
     }
-    
+
     char *end = start;
-    
+
     //
     // Find next instance of token or end of string.
     //
-    for ( char c = *end; c != '\0'; c = *(++end) ) {
-        if ( strchr(delims, c) != nullptr ) {
+    for (char c = *end; c != '\0'; c = *(++end)) {
+        if (strchr(delims, c) != nullptr) {
             break;
         }
     }
-    
-    if ( end <= start ) {
+
+    if (end <= start) {
         Release_Buffer();
         tok->Release_Buffer();
-        
+
         return false;
     }
-    
+
     //
-    // Copy found region into provided AsciiString, then move this string
+    // Copy found region into provided Utf8String, then move this string
     // to start of next section.
     //
     char *tokstr = tok->Get_Buffer_For_Read(end - start + 1);
     memcpy(tokstr, start, end - start);
     tokstr[end - start] = '\0';
     Set(end);
-    
+
     return true;
 }
 
-#ifdef GAME_DEBUG
-void AsciiString::Debug_Ignore_Leaks()
+void Utf8String::Validate()
 {
-    //TODO, doesnt seem to be implimented anywhere? It is called though...
+    // TODO, does not seem to be implemented anywhere? It is called though...
+}
+
+#ifdef GAME_DEBUG
+void Utf8String::Debug_Ignore_Leaks()
+{
+    // TODO, does not seem to be implemented anywhere? It is called though...
 }
 #endif // GAME_DEBUG
+
+#ifdef GAME_DLL
+#include <new>
+Utf8String *Utf8String::Hook_Ctor1(const char *s)
+{
+    return new (this) Utf8String(s);
+}
+Utf8String *Utf8String::Hook_Ctor2(Utf8String const &string)
+{
+    return new (this) Utf8String(string);
+}
+#endif // GAME_DLL

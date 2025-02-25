@@ -1,26 +1,17 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: KINDOF.CPP
-//
-//        Author:: OmniBlade
-//
-//  Contributors:: 
-//
-//   Description:: KindOf enum and string listings.
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief KindOf enum and string listings.
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #include "kindof.h"
 #include "bitflags.h"
 
@@ -28,9 +19,8 @@
 // on the template param incase of collision if it needs extending later,
 // but this is what the original looks like it did.
 // Maps what each bit flags.
-template <>
-const char *BitFlags<KINDOF_COUNT>::s_bitNamesList[] {
-    "OBSTACLE",
+template<>
+const char *BitFlags<KINDOF_COUNT>::s_bitNamesList[]{ "OBSTACLE",
     "SELECTABLE",
     "IMMOBILE",
     "CAN_ATTACK",
@@ -146,5 +136,28 @@ const char *BitFlags<KINDOF_COUNT>::s_bitNamesList[] {
     "DEMOTRAP",
     "CONSERVATIVE_BUILDING",
     "IGNORE_DOCKING_BONES",
-    nullptr
-};
+    nullptr };
+
+BitFlags<KINDOF_COUNT> KINDOFMASK_NONE;
+
+#ifndef GAME_DLL
+BitFlags<KINDOF_COUNT> KINDOFMASK_FS;
+#endif
+
+void Init_KindOf_Masks()
+{
+    KINDOFMASK_FS.Set(KINDOF_FS_FACTORY, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_BASE_DEFENSE, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_TECHNOLOGY, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_SUPPLY_DROPZONE, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_SUPERWEAPON, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_BLACK_MARKET, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_SUPPLY_CENTER, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_STRATEGY_CENTER, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_FAKE, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_INTERNET_CENTER, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_ADVANCED_TECH, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_BARRACKS, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_WARFACTORY, true);
+    KINDOFMASK_FS.Set(KINDOF_FS_AIRFIELD, true);
+}

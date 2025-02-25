@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Base class for archive file handling.
  *
@@ -9,14 +9,10 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
-
-#ifndef ARCHIVEFILE_H
-#define ARCHIVEFILE_H
 
 #include "always.h"
 #include "asciistring.h"
@@ -28,50 +24,76 @@
 struct FileInfo;
 class File;
 
-struct ArchivedFileInfo
+class ArchivedFileInfo
 {
-    AsciiString file_name;
-    AsciiString archive_name;
+public:
+    ArchivedFileInfo() { Clear(); }
+    void Clear()
+    {
+        file_name.Clear();
+        archive_name.Clear();
+        position = 0;
+        size = 0;
+    }
+
+    Utf8String file_name;
+    Utf8String archive_name;
     int position;
     int size;
 };
 
-struct DetailedArchiveDirectoryInfo
+class DetailedArchivedDirectoryInfo
 {
-    AsciiString name;
-    mutable std::map<AsciiString, DetailedArchiveDirectoryInfo> directories; // Mutable to use operator[] in const functions
-    std::map<AsciiString, ArchivedFileInfo> files;
+public:
+    void Clear()
+    {
+        name.Clear();
+        directories.clear();
+        files.clear();
+    }
+
+    Utf8String name;
+    std::map<Utf8String, DetailedArchivedDirectoryInfo> directories;
+    std::map<Utf8String, ArchivedFileInfo> files;
 };
 
 class ArchiveFile
 {
 public:
-    ArchiveFile() : m_backingFile(nullptr), m_archiveInfo() {}
-    virtual ~ArchiveFile() {}
+    ArchiveFile() : m_attachedFile(nullptr) { m_archiveInfo.Clear(); }
 
-    virtual bool Get_File_Info(AsciiString const &name, FileInfo *info) = 0;
+    virtual ~ArchiveFile()
+    {
+        if (m_attachedFile != nullptr) {
+            m_attachedFile->Close();
+            m_attachedFile = nullptr;
+        }
+    }
+
+    virtual bool Get_File_Info(Utf8String const &name, FileInfo *info) const = 0;
     virtual File *Open_File(const char *filename, int mode) = 0;
     virtual void Close_All_Files() = 0;
-    virtual AsciiString Get_Name() = 0;
-    virtual AsciiString Get_Path() = 0;
+    virtual Utf8String Get_Name() = 0;
+    virtual Utf8String Get_Path() = 0;
     virtual void Set_Search_Priority(int priority) = 0;
     virtual void Close() = 0;
 
-    ArchivedFileInfo *Get_Archived_File_Info(AsciiString const &filename);
-    void Add_File(AsciiString const &filename, ArchivedFileInfo const *info);
+    const ArchivedFileInfo *Get_Archived_File_Info(Utf8String const &filename) const;
+    void Add_File(Utf8String const &filename, ArchivedFileInfo const *info);
     void Attach_File(File *file);
-    void Get_File_List_From_Dir(AsciiString const &subdir, AsciiString const &dirpath, AsciiString const &filter,
-        std::set<AsciiString, rts::less_than_nocase<AsciiString>> &filelist, bool search_subdir) const;
-
-protected:
-    void Get_File_List_From_Dir(DetailedArchiveDirectoryInfo const *dir_info, AsciiString const &dirpath,
-        AsciiString const &filter, std::set<AsciiString, rts::less_than_nocase<AsciiString>> &filelist,
+    void Get_File_List_In_Directory(Utf8String const &subdir,
+        Utf8String const &dirpath,
+        Utf8String const &filter,
+        std::set<Utf8String, rts::less_than_nocase<Utf8String>> &filelist,
         bool search_subdir) const;
 
-    File *m_backingFile;
-    DetailedArchiveDirectoryInfo m_archiveInfo;
+protected:
+    void Get_File_List_In_Directory(DetailedArchivedDirectoryInfo const *dir_info,
+        Utf8String const &dirpath,
+        Utf8String const &filter,
+        std::set<Utf8String, rts::less_than_nocase<Utf8String>> &filelist,
+        bool search_subdir) const;
+
+    File *m_attachedFile;
+    DetailedArchivedDirectoryInfo m_archiveInfo;
 };
-
-bool Search_String_Matches(AsciiString string, AsciiString search);
-
-#endif // _ARCHIVEFILE_H

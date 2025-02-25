@@ -1,37 +1,29 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: WATER.CPP
-//
-//        Author:: OmniBlade
-//
-//  Contributors:: 
-//
-//   Description:: Configuration for water effects.
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief Configuration for water effects.
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #include "water.h"
-#include "gamedebug.h"
 #include "gametype.h"
+#include "terrainvisual.h"
+#include <captainslog.h>
+#include <cstddef>
 
-#ifdef THYME_STANDALONE
+#ifndef GAME_DLL
 WaterSetting g_waterSettings[TIME_OF_DAY_COUNT];
-WaterTrasparencySetting *g_theWaterTransparency = nullptr;
+Override<WaterTransparencySetting> g_theWaterTransparency;
 #endif
 
-FieldParse WaterSetting::m_waterSettingFieldParseTable[] =
-{
+const FieldParse WaterSetting::m_waterSettingFieldParseTable[] = {
     { "SkyTexture", &INI::Parse_AsciiString, nullptr, offsetof(WaterSetting, m_skyTextureFile) },
     { "WaterTexture", &INI::Parse_AsciiString, nullptr, offsetof(WaterSetting, m_waterTextureFile) },
     { "Vertex00Color", &INI::Parse_RGBA_Color_Int, nullptr, offsetof(WaterSetting, m_vertex00Diffuse) },
@@ -47,10 +39,12 @@ FieldParse WaterSetting::m_waterSettingFieldParseTable[] =
     { nullptr, nullptr, nullptr, 0 }
 };
 
-FieldParse WaterTransparencySetting::m_waterTransparencySettingFieldParseTable[] =
-{
+const FieldParse WaterTransparencySetting::m_waterTransparencySettingFieldParseTable[] = {
     { "TransparentWaterDepth", &INI::Parse_Real, nullptr, offsetof(WaterTransparencySetting, m_transparentWaterDepth) },
-    { "TransparentWaterMinOpacity", &INI::Parse_Real, nullptr, offsetof(WaterTransparencySetting, m_transparentWaterMinOpacity) },
+    { "TransparentWaterMinOpacity",
+        &INI::Parse_Real,
+        nullptr,
+        offsetof(WaterTransparencySetting, m_transparentWaterMinOpacity) },
     { "StandingWaterColor", &INI::Parse_RGB_Color, nullptr, offsetof(WaterTransparencySetting, m_standingWaterColor) },
     { "StandingWaterTexture", &INI::Parse_AsciiString, nullptr, offsetof(WaterTransparencySetting, m_standingWaterTexture) },
     { "AdditiveBlending", &INI::Parse_Bool, nullptr, offsetof(WaterTransparencySetting, m_additiveBlending) },
@@ -63,19 +57,19 @@ FieldParse WaterTransparencySetting::m_waterTransparencySettingFieldParseTable[]
     { nullptr, nullptr, nullptr, 0 }
 };
 
-
-void WaterSetting::Parse_Water_Setting(INI *ini)
+// Was originally INI::parseWaterSettingDefinition
+void WaterSetting::Parse_Water_Setting_Definition(INI *ini)
 {
-    AsciiString token = ini->Get_Next_Token();
+    Utf8String token = ini->Get_Next_Token();
     int tod;
 
-    for ( tod = 0; tod < TIME_OF_DAY_COUNT; ++tod ) {
-        if ( strcasecmp(g_timeOfDayNames[tod], token.Str()) == 0 ) {
+    for (tod = 0; tod < TIME_OF_DAY_COUNT; ++tod) {
+        if (strcasecmp(g_timeOfDayNames[tod], token.Str()) == 0) {
             break;
         }
     }
 
-    ASSERT_THROW(tod < TIME_OF_DAY_COUNT, 0xDEAD0006);
+    captainslog_relassert(tod < TIME_OF_DAY_COUNT, 0xDEAD0006, "Failed to parse a valid time of day.");
     ini->Init_From_INI(&g_waterSettings[tod], m_waterSettingFieldParseTable);
 }
 
@@ -92,29 +86,46 @@ WaterTransparencySetting::WaterTransparencySetting() :
     m_skyboxTextureW("TSMorningW.tga"),
     m_skyboxTextureT("TSMorningT.tga")
 {
-
 }
 
-void WaterTransparencySetting::Parse_Water_Transparency(INI *ini)
+// Was originally INI::parseWaterTransparencyDefinition
+void WaterTransparencySetting::Parse_Water_Transparency_Definition(INI *ini)
 {
-    if ( g_theWaterTransparency == nullptr ) {
-        g_theWaterTransparency = new WaterTransparencySetting;
+    if (*g_theWaterTransparency) {
+        if (ini->Get_Load_Type() == INI_LOAD_CREATE_OVERRIDES) {
+            WaterTransparencySetting *old_wts = g_theWaterTransparency;
+            WaterTransparencySetting *new_wts = NEW_POOL_OBJ(WaterTransparencySetting);
+            *new_wts = *old_wts;
+            new_wts->Set_Is_Allocated();
+            old_wts->Friend_Get_Final_Override()->Set_Next(new_wts);
+        } else {
+            throw CODE_06;
+        }
     } else {
-        ASSERT_THROW(ini->Get_Load_Type() == INI_LOAD_CREATE_OVERRIDES, 0xDEAD0006);
-        WaterTransparencySetting *new_wts = new WaterTransparencySetting;
-        *new_wts = *g_theWaterTransparency;
-        new_wts->m_isAllocated = true;
-        g_theWaterTransparency->Add_Override(new_wts);
+        g_theWaterTransparency = NEW_POOL_OBJ(WaterTransparencySetting);
     }
 
-    ini->Init_From_INI(
-        g_theWaterTransparency->Get_Override(),
-        m_waterTransparencySettingFieldParseTable
-    );
+    Overridable *setting = g_theWaterTransparency;
+    setting = setting->Friend_Get_Final_Override();
+    ini->Init_From_INI(setting, m_waterTransparencySettingFieldParseTable);
 
-    if ( ini->Get_Load_Type() == INI_LOAD_CREATE_OVERRIDES ) {
-        if ( g_theWaterTransparency != g_theWaterTransparency->Get_Override() ) {
-            // TODO requires TerrainVisual virtual table layout implementing.
+    if (ini->Get_Load_Type() == INI_LOAD_CREATE_OVERRIDES) {
+        WaterTransparencySetting *oldsetting = g_theWaterTransparency;
+        Override<WaterTransparencySetting> newsetting(g_theWaterTransparency);
+        if (oldsetting != *newsetting) {
+            const Utf8String *oldtex[5];
+            const Utf8String *newtex[5];
+            oldtex[0] = &oldsetting->m_skyboxTextureN;
+            newtex[0] = &newsetting->m_skyboxTextureN;
+            oldtex[1] = &oldsetting->m_skyboxTextureE;
+            newtex[1] = &newsetting->m_skyboxTextureE;
+            oldtex[2] = &oldsetting->m_skyboxTextureS;
+            newtex[2] = &newsetting->m_skyboxTextureS;
+            oldtex[3] = &oldsetting->m_skyboxTextureW;
+            newtex[3] = &newsetting->m_skyboxTextureW;
+            oldtex[4] = &oldsetting->m_skyboxTextureT;
+            newtex[4] = &newsetting->m_skyboxTextureT;
+            g_theTerrainVisual->Replace_Skybox_Textures(oldtex, newtex);
         }
     }
 }

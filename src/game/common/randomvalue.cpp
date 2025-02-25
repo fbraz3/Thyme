@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Classes and functions for generating pseudo random numbers that are deterministic from a given seed.
  *
@@ -9,33 +9,31 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #include "randomvalue.h"
 #include "crc.h"
-#include "gamedebug.h"
-#include <cmath>
+#include "gamemath.h"
+#include "ini.h"
+#include <captainslog.h>
 #include <ctime>
 
-namespace {
+using GameMath::Pow;
+using std::time;
 
-uint32_t TheGameAudioSeed[6] = {
-    0xF22D0E56, 0x883126E9, 0xC624DD2F, 0x0702C49C, 0x9E353F7D
-};
+namespace
+{
 
-uint32_t TheGameClientSeed[6] = {
-    0xF22D0E56, 0x883126E9, 0xC624DD2F, 0x0702C49C, 0x9E353F7D
-};
+uint32_t g_theGameAudioSeed[6] = { 0xF22D0E56, 0x883126E9, 0xC624DD2F, 0x0702C49C, 0x9E353F7D, 0x6FDF3B64 };
 
-uint32_t TheGameLogicSeed[6] = {
-    0xF22D0E56, 0x883126E9, 0xC624DD2F, 0x0702C49C, 0x9E353F7D
-};
+uint32_t g_theGameClientSeed[6] = { 0xF22D0E56, 0x883126E9, 0xC624DD2F, 0x0702C49C, 0x9E353F7D, 0x6FDF3B64 };
 
-uint32_t TheGameLogicBaseSeed;
+uint32_t g_theGameLogicSeed[6] = { 0xF22D0E56, 0x883126E9, 0xC624DD2F, 0x0702C49C, 0x9E353F7D, 0x6FDF3B64 };
 
-float const TheMultFactor = 1.0 / (pow(2.0, 32.0) - 1.0);
+uint32_t g_theGameLogicBaseSeed;
+
+const float g_theMultFactor = 1.0 / (Pow(2.0, 32.0) - 1.0);
 
 // Get the next random value based on the given seed.
 uint32_t Random_Value(uint32_t seed[6])
@@ -84,34 +82,34 @@ void Seed_Random(uint32_t initial, uint32_t seed[6])
 // Initialise the RNG system based on the current time.
 void Init_Random()
 {
-    DEBUG_LOG("Initialising random seeds with time() as the initial value.\n");
+    captainslog_info("Initialising random seeds with time() as the initial value.");
     time_t initial = time(nullptr);
-    Seed_Random(initial, TheGameAudioSeed);
-    Seed_Random(initial, TheGameClientSeed);
-    Seed_Random(initial, TheGameLogicSeed);
-    TheGameLogicBaseSeed = initial;
+    Seed_Random(initial, g_theGameAudioSeed);
+    Seed_Random(initial, g_theGameClientSeed);
+    Seed_Random(initial, g_theGameLogicSeed);
+    g_theGameLogicBaseSeed = initial;
 }
 
 // Initialise the RNG system based on an initial value.
 void Init_Random(uint32_t initial)
 {
-    DEBUG_LOG("Initialising random seeds with %04X as the initial value.\n", initial);
-    Seed_Random(initial, TheGameAudioSeed);
-    Seed_Random(initial, TheGameClientSeed);
-    Seed_Random(initial, TheGameLogicSeed);
+    captainslog_info("Initialising random seeds with %04X as the initial value.", initial);
+    Seed_Random(initial, g_theGameAudioSeed);
+    Seed_Random(initial, g_theGameClientSeed);
+    Seed_Random(initial, g_theGameLogicSeed);
 }
 
 // Initialise only the logic RNG system based on an initial value.
 void Init_Game_Logic_Random(uint32_t initial)
 {
-    DEBUG_LOG("Initialising logic random seed with %04X as the initial value.\n", initial);
-    Seed_Random(initial, TheGameLogicSeed);
+    captainslog_info("Initialising logic random seed with %04X as the initial value.", initial);
+    Seed_Random(initial, g_theGameLogicSeed);
 }
 
 // Get the initial value used for Logic RNG
 uint32_t Get_Logic_Random_Seed()
 {
-    return TheGameLogicBaseSeed;
+    return g_theGameLogicBaseSeed;
 }
 
 // Get the CRC of the Logic seed.
@@ -119,7 +117,7 @@ uint32_t Get_Logic_Random_Seed_CRC()
 {
     CRC c;
 
-    c.Compute_CRC(TheGameLogicSeed, 24);
+    c.Compute_CRC(g_theGameLogicSeed, 24);
 
     return c.Get_CRC();
 }
@@ -127,7 +125,7 @@ uint32_t Get_Logic_Random_Seed_CRC()
 int32_t Get_Client_Random_Value(int32_t lo, int32_t hi, const char *file, int line)
 {
     if (hi - lo != -1) {
-        return lo + Random_Value(TheGameClientSeed) % (hi - lo + 1);
+        return lo + Random_Value(g_theGameClientSeed) % (hi - lo + 1);
     }
 
     return hi;
@@ -136,7 +134,7 @@ int32_t Get_Client_Random_Value(int32_t lo, int32_t hi, const char *file, int li
 int32_t Get_Audio_Random_Value(int32_t lo, int32_t hi, const char *file, int line)
 {
     if (hi - lo != -1) {
-        return lo + Random_Value(TheGameAudioSeed) % (hi - lo + 1);
+        return lo + Random_Value(g_theGameAudioSeed) % (hi - lo + 1);
     }
 
     return hi;
@@ -145,7 +143,7 @@ int32_t Get_Audio_Random_Value(int32_t lo, int32_t hi, const char *file, int lin
 int32_t Get_Logic_Random_Value(int32_t lo, int32_t hi, const char *file, int line)
 {
     if (hi - lo != -1) {
-        return lo + Random_Value(TheGameLogicSeed) % (hi - lo + 1);
+        return lo + Random_Value(g_theGameLogicSeed) % (hi - lo + 1);
     }
 
     return hi;
@@ -156,7 +154,7 @@ float Get_Client_Random_Value_Real(float lo, float hi, const char *file, int lin
     float diff = hi - lo;
 
     if (diff > 0.0f) {
-        return Random_Value(TheGameClientSeed) * TheMultFactor * diff + lo;
+        return float(float(float(Random_Value(g_theGameClientSeed) * g_theMultFactor) * diff) + lo);
     }
 
     return hi;
@@ -167,7 +165,7 @@ float Get_Audio_Random_Value_Real(float lo, float hi, const char *file, int line
     float diff = hi - lo;
 
     if (diff > 0.0f) {
-        return Random_Value(TheGameAudioSeed) * TheMultFactor * diff + lo;
+        return float(float(float(Random_Value(g_theGameAudioSeed) * g_theMultFactor) * diff) + lo);
     }
 
     return hi;
@@ -178,7 +176,7 @@ float Get_Logic_Random_Value_Real(float lo, float hi, const char *file, int line
     float diff = hi - lo;
 
     if (diff > 0.0f) {
-        return Random_Value(TheGameLogicSeed) * TheMultFactor * diff + lo;
+        return float(float(float(Random_Value(g_theGameLogicSeed) * g_theMultFactor) * diff) + lo);
     }
 
     return hi;
@@ -191,19 +189,19 @@ void GameLogicRandomVariable::Set_Range(float min, float max, DistributionType t
     m_type = type;
 }
 
-float GameLogicRandomVariable::Get_Value()
+float GameLogicRandomVariable::Get_Value() const
 {
     switch (m_type) {
         case CONSTANT:
             if (m_low == m_high) {
                 return m_low;
             } else {
-                DEBUG_LOG("m_low doesn't match m_high for CONSTANT GameLogicRandomVariable.\n");
+                captainslog_error("m_low doesn't match m_high for CONSTANT GameLogicRandomVariable.");
             }
         case UNIFORM: // Intentional fallthrough
             return Get_Logic_Random_Value_Real(m_low, m_high);
         default:
-            DEBUG_LOG("Unsupported distribution type in GameLogicRandomVariable.\n");
+            captainslog_error("Unsupported distribution type in GameLogicRandomVariable.");
             break;
     }
 
@@ -217,21 +215,42 @@ void GameClientRandomVariable::Set_Range(float min, float max, DistributionType 
     m_type = type;
 }
 
-float GameClientRandomVariable::Get_Value()
+float GameClientRandomVariable::Get_Value() const
 {
     switch (m_type) {
         case CONSTANT:
             if (m_low == m_high) {
                 return m_low;
             } else {
-                DEBUG_LOG("m_low doesn't match m_high for CONSTANT GameClientRandomVariable.\n");
+                captainslog_info("m_low doesn't match m_high for CONSTANT GameClientRandomVariable.");
             }
         case UNIFORM: // Intentional fallthrough
             return Get_Client_Random_Value_Real(m_low, m_high);
         default:
-            DEBUG_LOG("Unsupported distribution type in GameClientRandomVariable.\n");
+            captainslog_info("Unsupported distribution type in GameClientRandomVariable.");
             break;
     }
 
     return 0.0f;
+}
+
+constexpr const char *DistributionTypeNames[] = {
+    "CONSTANT",
+    "UNIFORM",
+    // Additional types have not been included as they are not usable
+    nullptr,
+};
+
+// zh: 0x0041D9F0 wb: 0x007A4B4C
+void GameClientRandomVariable::Parse(INI *ini, void *, void *store, const void *)
+{
+    const auto min = ini->Scan_Real(ini->Get_Next_Token());
+    const auto max = ini->Scan_Real(ini->Get_Next_Token());
+
+    DistributionType type = DistributionType::UNIFORM;
+    auto *token = ini->Get_Next_Token_Or_Null();
+    if (token != nullptr) {
+        type = static_cast<DistributionType>(ini->Scan_IndexList(token, DistributionTypeNames));
+    }
+    static_cast<GameClientRandomVariable *>(store)->Set_Range(min, max, type);
 }

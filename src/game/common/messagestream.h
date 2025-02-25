@@ -9,14 +9,10 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
-
-#ifndef MESSAGESTREAM_H
-#define MESSAGESTREAM_H
 
 #include "always.h"
 #include "gamemessagelist.h"
@@ -30,6 +26,7 @@ enum GameMessageDisposition
 class GameMessageTranslator
 {
 public:
+    GameMessageTranslator() {}
     virtual GameMessageDisposition Translate_Game_Message(const GameMessage *msg) = 0;
     virtual ~GameMessageTranslator() {}
 };
@@ -65,34 +62,14 @@ public:
     void Remove_Translator(unsigned id);
     void Propagate_Messages();
 
-#ifndef THYME_STANDALONE
-    static void Hook_Me();
-    GameMessage *Hook_Append_Message(GameMessage::MessageType type);
-    GameMessage *Hook_Insert_Message(GameMessage::MessageType type, GameMessage *msg);
-#endif
-
 private:
     MessageStream::TranslatorData *m_firstTranslator;
     MessageStream::TranslatorData *m_lastTranslator;
     unsigned m_nextTranslatorID;
 };
 
-#ifndef THYME_STANDALONE
-#include "hooker.h"
-
+#ifdef GAME_DLL
 extern MessageStream *&g_theMessageStream;
-
-inline void MessageStream::Hook_Me()
-{
-    Hook_Method(0x0040D960, &Hook_Append_Message);
-    Hook_Method(0x0040DA00, &Hook_Insert_Message);
-    Hook_Method(0x0040DAA0, &Attach_Translator);
-    Hook_Method(0x0040DB60, &Find_Translator);
-    Hook_Method(0x0040DB90, &Remove_Translator);
-    Hook_Method(0x0040DBF0, &Propagate_Messages);
-}
 #else
 extern MessageStream *g_theMessageStream;
-#endif
-
 #endif

@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Interface for the game engine implementation.
  *
@@ -9,20 +9,13 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
 
-#ifndef GAMEENGINE_H
-#define GAMEENGINE_H
-
+#include "always.h"
 #include "subsysteminterface.h"
-
-#ifndef THYME_STANDALONE
-#include "hooker.h"
-#endif
 
 class ArchiveFileSystem;
 class AudioManager;
@@ -33,7 +26,7 @@ class GameLogic;
 class LocalFileSystem;
 class MessageStream;
 class ModuleFactory;
-class Network;
+class NetworkInterface;
 class ParticleSystemManager;
 class Radar;
 class ThingFactory;
@@ -74,7 +67,10 @@ public:
     virtual WebBrowser *Create_Web_Browser() = 0;
     virtual ParticleSystemManager *Create_Particle_System_Manager() = 0;
     virtual AudioManager *Create_Audio_Manager() = 0;
-    virtual Network *Create_Network() = 0;
+    virtual NetworkInterface *Create_Network() = 0;
+
+    void Real_Init(int argc, char *argv[]); // temporary thing to make hooking work since Hook_Any wont work because there
+                                            // are 2 functions named Init and Hook_Method wont work because Init is virtual
 
 protected:
     int m_maxFPS;
@@ -82,10 +78,8 @@ protected:
     bool m_isActive;
 };
 
-#ifndef THYME_STANDALONE
+#ifdef GAME_DLL
 extern GameEngine *&g_theGameEngine;
 #else
 extern GameEngine *g_theGameEngine;
 #endif
-
-#endif // _GAMEENGINE_H

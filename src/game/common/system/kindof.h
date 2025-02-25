@@ -1,32 +1,22 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: KINDOF.H
-//
-//        Author:: OmniBlade
-//
-//  Contributors:: 
-//
-//   Description:: KindOf enum and string listings.
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief KindOf enum and string listings.
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #pragma once
 
-#ifndef KINDOF_H
-#define KINDOF_H
-
 #include "always.h"
+
+template<int bits> class BitFlags;
 
 enum KindOfType : int32_t
 {
@@ -150,4 +140,12 @@ enum KindOfType : int32_t
     KINDOF_COUNT,
 };
 
+extern BitFlags<KINDOF_COUNT> KINDOFMASK_NONE;
+
+#ifdef GAME_DLL
+extern BitFlags<KINDOF_COUNT> &KINDOFMASK_FS;
+#else
+extern BitFlags<KINDOF_COUNT> KINDOFMASK_FS;
 #endif
+
+void Init_KindOf_Masks();

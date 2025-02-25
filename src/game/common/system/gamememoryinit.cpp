@@ -1,44 +1,44 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: GAMEMEMORY.CPP
-//
-//        Author:: OmniBlade
-//
-//  Contributors:: 
-//
-//   Description:: 
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief Custom memory manager designed to limit OS calls to allocate heap memory.
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #include "gamememoryinit.h"
-#include "minmax.h"
-#include "gamedebug.h"
 #include "rawalloc.h"
+#include <algorithm>
 #include <cstdio>
+#include <cstring>
+#include <strings.h>
+
+#ifndef PLATFORM_WINDOWS
+#include <libgen.h>
+#include <unistd.h>
+#endif
+
+using std::strcat;
+using std::strcmp;
+using std::strlen;
 
 static PoolInitRec const UserDMAParameters[7] = {
-    { "dmaPool_16",     16, 130000, 10000 },
-    { "dmaPool_32",     32, 250000, 10000 },
-    { "dmaPool_64",     64, 100000, 10000 },
-    { "dmaPool_128",   128,  80000, 10000 },
-    { "dmaPool_256",   256,  20000,  5000 },
-    { "dmaPool_512",   512,  16000,  5000 },
-    { "dmaPool_1024", 1024,   6000,  1024 },
+    { "dmaPool_16", 16, 130000, 10000 },
+    { "dmaPool_32", 32, 250000, 10000 },
+    { "dmaPool_64", 64, 100000, 10000 },
+    { "dmaPool_128", 128, 80000, 10000 },
+    { "dmaPool_256", 256, 20000, 5000 },
+    { "dmaPool_512", 512, 16000, 5000 },
+    { "dmaPool_1024", 1024, 6000, 1024 },
 };
 
-static PoolSizeRec UserMemoryPools[] =
-{
+static PoolSizeRec UserMemoryPools[] = {
     { "PartitionContactListNode", 2048, 512 },
     { "BattleshipUpdate", 32, 32 },
     { "FlyToDestAndDestroyUpdate", 32, 32 },
@@ -649,19 +649,18 @@ static PoolSizeRec UserMemoryPools[] =
     { "ThumbnailManagerClass", 32, 32 },
     { "SmudgeSet", 32, 32 },
     { "Smudge", 128, 32 },
-    { nullptr, 0, 0 }       // Last entry always null.
+    { "StandardFile", 32, 32 }, // Thyme specific.
+    { nullptr, 0, 0 } // Last entry always null.
 };
-
-
 
 void User_Memory_Adjust_Pool_Size(const char *name, int &initial_alloc, int &overflow_alloc)
 {
-    if ( initial_alloc > 0 ) {
+    if (initial_alloc > 0) {
         return;
     }
 
-    for ( PoolSizeRec *psr = UserMemoryPools; psr->pool_name != nullptr; ++psr ) {
-        if ( strcmp(psr->pool_name, name) == 0 ) {
+    for (PoolSizeRec *psr = UserMemoryPools; psr->pool_name != nullptr; ++psr) {
+        if (strcmp(psr->pool_name, name) == 0) {
             initial_alloc = psr->initial_allocation_count;
             overflow_alloc = psr->overflow_allocation_count;
         }
@@ -670,34 +669,40 @@ void User_Memory_Adjust_Pool_Size(const char *name, int &initial_alloc, int &ove
 
 void User_Memory_Get_DMA_Params(int *count, PoolInitRec const **params)
 {
-    //DEBUG_LOG("Retrieving user DynamicMemoryAllocator parameters.\n");
+    // DEBUG_LOG("Retrieving user DynamicMemoryAllocator parameters.\n");
 
-    *count = 7; //Array size UserDMAParameters
+    *count = 7; // Array size UserDMAParameters
     *params = UserDMAParameters;
 }
 
 void User_Memory_Init_Pools()
 {
-    //DEBUG_LOG("Initialising user memory pools.\n");
-
-    char path[PATH_MAX];
-    char pool_name[256];
-    int initial_alloc;
-    int overflow_alloc;
+    // #FIX Initialize variables.
+    char path[PATH_MAX] = { 0 };
+    char pool_name[256] = { 0 };
+    int initial_alloc = 0;
+    int overflow_alloc = 0;
 
 #ifdef PLATFORM_WINDOWS
     GetModuleFileNameA(0, path, PATH_MAX);
-#else
-    // Cross-Platform TODO
+#elif defined PLATFORM_LINUX // posix otherwise, really just linux currently
+    // TODO /proc/curproc/file for FreeBSD /proc/self/path/a.out Solaris
+    readlink("/proc/self/exe", path, PATH_MAX);
+    dirname(path);
+#elif defined(PLATFORM_OSX) // osx otherwise
+    int size = PATH_MAX;
+    _NSGetExecutablePath(path, &size);
+    dirname(path);
+#else //
+#error Platform not supported for Set_Working_Directory()!
 #endif
-    //
+
     // Get path to current exe without filename.
-    //
     char *path_end = &path[strlen(path)];
 
-    if ( path_end != path ) {
-        while ( path_end != path ) {
-            if ( *path_end == '\\' || *path_end == '/' ) {
+    if (path_end != path) {
+        while (path_end != path) {
+            if (*path_end == '\\' || *path_end == '/') {
                 break;
             }
 
@@ -708,27 +713,25 @@ void User_Memory_Init_Pools()
         *path_end = '\0';
     }
 
-    //
     // Get the path to the user configurable memory pool ini.
-    //
     strcat(path, "/Data/INI/MemoryPools.ini");
 
     FILE *fp = fopen(path, "r");
 
-    //
     // Go through file and match entries against internal table and update
     // table as needed. If a pool name is specified twice, last entry wins.
-    //
-    if ( fp != nullptr ) {
-        while ( fgets(path, PATH_MAX, fp) != nullptr ) {
-            if ( *path != ';' && sscanf(path, "%s %d %d", pool_name, &initial_alloc, &overflow_alloc) == 3 ) {
-                for ( PoolSizeRec *psr = UserMemoryPools; psr->pool_name != nullptr; ++psr ) {
-                    if ( strcasecmp(psr->pool_name, pool_name) == 0 ) {
-                        psr->initial_allocation_count = MAX((int)sizeof(void*), Round_Up_Word_Size(initial_alloc));
-                        psr->overflow_allocation_count = MAX((int)sizeof(void*), Round_Up_Word_Size(overflow_alloc));
+    if (fp != nullptr) {
+        while (fgets(path, PATH_MAX, fp) != nullptr) {
+            // #FIX Scan up to 255 characters only to avoid buffer overflow.
+            if (*path != ';' && sscanf(path, "%255s %d %d", pool_name, &initial_alloc, &overflow_alloc) == 3) {
+                for (PoolSizeRec *psr = UserMemoryPools; psr->pool_name != nullptr; ++psr) {
+                    if (strcasecmp(psr->pool_name, pool_name) == 0) {
+                        psr->initial_allocation_count = std::max((int)sizeof(void *), Round_Up_Word_Size(initial_alloc));
+                        psr->overflow_allocation_count = std::max((int)sizeof(void *), Round_Up_Word_Size(overflow_alloc));
                     }
                 }
             }
         }
+        fclose(fp);
     }
 }

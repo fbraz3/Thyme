@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Maps strings to 32bit integers.
  *
@@ -9,16 +9,15 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #include "namekeygenerator.h"
-#include "gamedebug.h"
+#include <cctype>
 
-#ifndef THYME_STANDALONE
-NameKeyGenerator *&g_theNameKeyGenerator = Make_Global<NameKeyGenerator *>(0x00A2B928);
-#else
+using std::tolower;
+
+#ifndef GAME_DLL
 NameKeyGenerator *g_theNameKeyGenerator = nullptr;
 #endif
 
@@ -46,7 +45,7 @@ void NameKeyGenerator::Reset()
     m_nextID = (NameKeyType)1;
 }
 
-AsciiString NameKeyGenerator::Key_To_Name(NameKeyType key)
+Utf8String NameKeyGenerator::Key_To_Name(NameKeyType key)
 {
     // Find the bucket that matches the provided key if it exists.
     Bucket *bucket;
@@ -63,7 +62,7 @@ AsciiString NameKeyGenerator::Key_To_Name(NameKeyType key)
         }
     }
 
-    return AsciiString::s_emptyString;
+    return Utf8String::s_emptyString;
 }
 
 NameKeyType NameKeyGenerator::Name_To_Lower_Case_Key(const char *name)
@@ -86,7 +85,7 @@ NameKeyType NameKeyGenerator::Name_To_Lower_Case_Key(const char *name)
         }
     }
 
-    bucket = new Bucket;
+    bucket = NEW_POOL_OBJ(Bucket);
     bucket->m_key = (NameKeyType)m_nextID++;
     bucket->m_nameString = name;
     bucket->m_nextInSocket = m_sockets[socket_hash];
@@ -119,7 +118,7 @@ NameKeyType NameKeyGenerator::Name_To_Key(const char *name)
         }
     }
 
-    bucket = new Bucket;
+    bucket = NEW_POOL_OBJ(Bucket);
     bucket->m_key = (NameKeyType)m_nextID++;
     bucket->m_nameString = name;
     bucket->m_nextInSocket = m_sockets[socket_hash];
@@ -148,7 +147,7 @@ void NameKeyGenerator::Free_Sockets()
 
             do {
                 next = bucket->m_nextInSocket;
-                Delete_Instance(bucket);
+                bucket->Delete_Instance();
                 bucket = next;
             } while (next != nullptr);
         }
@@ -157,11 +156,7 @@ void NameKeyGenerator::Free_Sockets()
     }
 }
 
-NameKeyType StaticNameKey::Key()
+NameKeyType Name_To_Key(const char *name)
 {
-    if (m_key == NAMEKEY_INVALID && g_theNameKeyGenerator != nullptr) {
-        m_key = g_theNameKeyGenerator->Name_To_Key(m_name);
-    }
-
-    return m_key;
+    return g_theNameKeyGenerator->Name_To_Key(name);
 }

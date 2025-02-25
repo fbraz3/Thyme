@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Classes for handling terrain textures and properties.
  *
@@ -9,24 +9,20 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #include "terraintypes.h"
-#include "gamedebug.h"
+#include <cstddef>
 
-#ifndef THYME_STANDALONE
-TerrainTypeCollection *&g_theTerrainTypes = Make_Global<TerrainTypeCollection *>(0x00A2BE54);
-#else
+#ifndef GAME_DLL
 TerrainTypeCollection *g_theTerrainTypes = nullptr;
 #endif
 
-namespace {
-
-const char *s_terrainTypeNames[] =
+namespace
 {
-    "NONE",
+
+const char *s_terrainTypeNames[] = { "NONE",
     "DESERT_1",
     "DESERT_2",
     "DESERT_3",
@@ -64,12 +60,11 @@ const char *s_terrainTypeNames[] =
     "CHINA",
     "ROCK_ACCENT",
     "URBAN",
-    nullptr
-};
+    nullptr };
 
 } // namespace
 
-FieldParse TerrainTypeCollection::s_terrainTypeParseTable[] = {
+const FieldParse TerrainTypeCollection::s_terrainTypeParseTable[] = {
     { "Texture", &INI::Parse_AsciiString, nullptr, offsetof(TerrainType, m_texture) },
     { "BlendEdges", &INI::Parse_Bool, nullptr, offsetof(TerrainType, m_blendEdgeTexture) },
     { "Class", &INI::Parse_Index_List, s_terrainTypeNames, offsetof(TerrainType, m_class) },
@@ -78,12 +73,7 @@ FieldParse TerrainTypeCollection::s_terrainTypeParseTable[] = {
 };
 
 TerrainType::TerrainType() :
-    m_name(),
-    m_texture(),
-    m_blendEdgeTexture(false),
-    m_class(TERRAIN_NONE),
-    m_restrictConstruction(false),
-    m_next(nullptr)
+    m_name(), m_texture(), m_blendEdgeTexture(false), m_class(TERRAIN_NONE), m_restrictConstruction(false), m_next(nullptr)
 {
 }
 
@@ -91,12 +81,12 @@ TerrainTypeCollection::~TerrainTypeCollection()
 {
     while (m_terrainList != nullptr) {
         TerrainType *next = m_terrainList->m_next;
-        Delete_Instance(m_terrainList);
+        m_terrainList->Delete_Instance();
         m_terrainList = next;
     }
 }
 
-TerrainType *TerrainTypeCollection::Find_Terrain(AsciiString name)
+TerrainType *TerrainTypeCollection::Find_Terrain(Utf8String name)
 {
     TerrainType *retval = m_terrainList;
 
@@ -112,9 +102,9 @@ TerrainType *TerrainTypeCollection::Find_Terrain(AsciiString name)
     return retval;
 }
 
-TerrainType *TerrainTypeCollection::New_Terrain(AsciiString name)
+TerrainType *TerrainTypeCollection::New_Terrain(Utf8String name)
 {
-    TerrainType *retval = new TerrainType;
+    TerrainType *retval = NEW_POOL_OBJ(TerrainType);
     TerrainType *def = Find_Terrain("DefaultTerrain");
 
     if (def != nullptr) {
@@ -128,9 +118,10 @@ TerrainType *TerrainTypeCollection::New_Terrain(AsciiString name)
     return retval;
 }
 
+// Was originally INI::parseTerrainDefinition
 void TerrainTypeCollection::Parse_Terrain_Definition(INI *ini)
 {
-    AsciiString token = ini->Get_Next_Token();
+    Utf8String token = ini->Get_Next_Token();
     TerrainType *tt = g_theTerrainTypes->Find_Terrain(token);
 
     if (tt == nullptr) {

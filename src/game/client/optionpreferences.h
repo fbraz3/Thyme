@@ -1,34 +1,23 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: OPTIONPREFERENCES.H
-//
-//        Author:: OmniBlade
-//
-//  Contributors:: 
-//
-//   Description:: Class holding preferences from options.ini.
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief Class holding preferences from options.ini.
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #pragma once
 
-#ifndef OPTIONPREFERENCES_H
-#define OPTIONPREFERENCES_H
-
-#include "userpreferences.h"
+#include "always.h"
 #include "asciistring.h"
 #include "gamelod.h"
+#include "userpreferences.h"
 
 class OptionPreferences : public UserPreferences
 {
@@ -49,8 +38,8 @@ public:
     int Get_Static_Game_Detail();
     void Set_Ideal_Static_Game_Detail(int level) { (*this)["IdealStaticGameLOD"] = g_staticGameLODNames[level]; }
     void Set_Static_Game_Detail(int level) { (*this)["StaticGameLOD"] = g_staticGameLODNames[level]; }
-    AsciiString Get_Preferred_3D_Provider();
-    AsciiString Get_Speaker_Type();
+    Utf8String Get_Preferred_3D_Provider();
+    Utf8String Get_Speaker_Type();
     float Get_Sound_Volume();
     float Get_3DSound_Volume();
     float Get_Speech_Volume();
@@ -76,13 +65,15 @@ public:
     uint16_t Get_Firewall_Port_Override();
     bool Get_Firewall_Need_Refresh();
     uint32_t Get_LAN_IPAddress();
-    void Set_LAN_IPAddress(AsciiString address);
+    void Set_LAN_IPAddress(Utf8String address);
     void Set_LAN_IPAddress(uint32_t address);
     uint32_t Get_Online_IPAddress();
-    void Set_Online_IPAddress(AsciiString address);
+    void Set_Online_IPAddress(Utf8String address);
     void Set_Online_IPAddress(uint32_t address);
-private:
 
+private:
 };
 
-#endif // OPTIONPREFERENCES_H
+#ifdef GAME_DLL
+#include "hooker.h"
+#endif

@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Command message list handling.
  *
@@ -9,18 +9,36 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #include "commandlist.h"
 #include "gamemessage.h"
 
-#ifndef THYME_STANDALONE
-CommandList *&g_theCommandList = Make_Global<CommandList *>(0x00A29B78);
-#else
+#ifndef GAME_DLL
 CommandList *g_theCommandList = nullptr;
 #endif
+
+CommandList::~CommandList()
+{
+    Destroy_All_Messages();
+}
+
+void CommandList::Init()
+{
+    GameMessageList::Init();
+}
+
+void CommandList::Reset()
+{
+    GameMessageList::Reset();
+    Destroy_All_Messages();
+}
+
+void CommandList::Update()
+{
+    GameMessageList::Update();
+}
 
 void CommandList::Destroy_All_Messages()
 {
@@ -28,7 +46,7 @@ void CommandList::Destroy_All_Messages()
 
     for (GameMessage *msg = m_firstMessage; msg != nullptr; msg = next) {
         next = msg->Get_Next();
-        Delete_Instance(msg);
+        msg->Delete_Instance();
     }
 
     m_firstMessage = nullptr;
@@ -42,14 +60,4 @@ void CommandList::Append_Message_List(GameMessage *list)
         Append_Message(msg);
         msg = next;
     }
-}
-
-CommandList::~CommandList()
-{
-    Destroy_All_Messages();
-}
-
-void CommandList::Reset()
-{
-    Destroy_All_Messages();
 }

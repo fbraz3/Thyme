@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Interface for UI function pointer manager.
  *
@@ -9,16 +9,16 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #include "functionlexicon.h"
+#include <captainslog.h>
 
-#ifndef THYME_STANDALONE
-FunctionLexicon *&g_theFunctionLexicon = Make_Global<FunctionLexicon*>(0x00A2BE44);
-#else
+#ifndef GAME_DLL
 FunctionLexicon *g_theFunctionLexicon = nullptr;
+#else
+#include "hooker.h"
 #endif
 
 FunctionLexicon::FunctionLexicon()
@@ -54,11 +54,10 @@ bool FunctionLexicon::Validate()
     for (int i = 0; i < MAX_FUNCTION_TABLES; ++i) {
         for (TableEntry *i_ent = m_tables[i]; i_ent != nullptr && i_ent->key != NAMEKEY_INVALID; ++i_ent) {
             for (int j = 0; j < MAX_FUNCTION_TABLES; ++j) {
-                for (TableEntry *j_ent = m_tables[j]; j_ent != nullptr && j_ent->key != NAMEKEY_INVALID; ++i_ent) {
+                for (TableEntry *j_ent = m_tables[j]; j_ent != nullptr && j_ent->key != NAMEKEY_INVALID; ++j_ent) {
                     if (i_ent != j_ent && i_ent->func == j_ent->func) {
-                        DEBUG_LOG("WARNING! Function lexicon entries match same address! '%s' and '%s'\n",
-                            i_ent->name,
-                            j_ent->name);
+                        captainslog_warn(
+                            "Function lexicon entries match same address! '%s' and '%s'\n", i_ent->name, j_ent->name);
                         valid = false;
                     }
                 }
@@ -92,8 +91,8 @@ void *FunctionLexicon::Key_To_Func(NameKeyType key, TableEntry *table)
  */
 void FunctionLexicon::Init()
 {
-#ifndef THYME_STANDALONE
-    Call_Method<void, FunctionLexicon>(0x004F3EC0, this);
+#ifdef GAME_DLL
+    Call_Method<void, FunctionLexicon>(PICK_ADDRESS(0x004F3EC0, 0x00A31671), this);
 #else
 // TODO requires several function pointer tables, do them as functions that call them require it?
 #endif
@@ -128,10 +127,10 @@ void *FunctionLexicon::Find_Function(NameKeyType key, TableIndex index)
 /**
  * @brief Specifically locates functions relating to window drawing.
  */
-drawfunc_t FunctionLexicon::Game_Win_Draw_Func(NameKeyType key, TableIndex index)
+WindowDrawFunc FunctionLexicon::Game_Win_Draw_Func(NameKeyType key, TableIndex index)
 {
     if (index != TABLE_ANY) {
-        return (drawfunc_t)Find_Function(key, index);
+        return (WindowDrawFunc)Find_Function(key, index);
     }
 
     void *tmp = Find_Function(key, TABLE_GAME_WIN_DEVICEDRAW);
@@ -140,16 +139,16 @@ drawfunc_t FunctionLexicon::Game_Win_Draw_Func(NameKeyType key, TableIndex index
         tmp = Find_Function(key, TABLE_GAME_WIN_DRAW);
     }
 
-    return (drawfunc_t)tmp;
+    return (WindowDrawFunc)tmp;
 }
 
 /**
  * @brief Specifically locates functions relating to layout initialisation.
  */
-layoutfunc_t FunctionLexicon::Win_Layout_Init_Func(NameKeyType key, TableIndex index)
+WindowLayoutCallbackFunc FunctionLexicon::Win_Layout_Init_Func(NameKeyType key, TableIndex index)
 {
     if (index != TABLE_ANY) {
-        return (layoutfunc_t)Find_Function(key, index);
+        return (WindowLayoutCallbackFunc)Find_Function(key, index);
     }
 
     void *tmp = Find_Function(key, TABLE_WIN_LAYOUT_INIT);
@@ -158,5 +157,5 @@ layoutfunc_t FunctionLexicon::Win_Layout_Init_Func(NameKeyType key, TableIndex i
         tmp = Find_Function(key, TABLE_LAYOUT_INIT);
     }
 
-    return (layoutfunc_t)tmp;
+    return (WindowLayoutCallbackFunc)tmp;
 }

@@ -9,17 +9,15 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
 
-#ifndef GAMEMESSAGE_H
-#define GAMEMESSAGE_H
-
+#include "always.h"
 #include "asciistring.h"
 #include "coord.h"
+#include "gametype.h"
 #include "mempoolobj.h"
 
 class GameMessageList;
@@ -42,11 +40,13 @@ enum ArgumentDataType
 
 union ArgumentType
 {
+    ArgumentType() {}
+
     int integer;
     float real;
     bool boolean;
-    unsigned int objectID;
-    unsigned int drawableID;
+    ObjectID objectID;
+    DrawableID drawableID;
     unsigned int teamID;
     Coord3D position;
     ICoord2D pixel;
@@ -58,6 +58,13 @@ union ArgumentType
 class GameMessageArgument : public MemoryPoolObject
 {
     IMPLEMENT_POOL(GameMessageArgument);
+
+protected:
+    virtual ~GameMessageArgument() override {}
+
+public:
+    // #BUGFIX Initialize important members
+    GameMessageArgument() : m_next(nullptr) {}
 
 public:
     GameMessageArgument *m_next;
@@ -216,6 +223,7 @@ public:
         MSG_INVALID_GUICOMMAND_HINT = 139,
         MSG_AREA_SELECTION_HINT = 140,
         MSG_DO_ATTACK_OBJECT_HINT = 141,
+        MSG_UNK1 = 142,
         MSG_DO_FORCE_ATTACK_OBJECT_HINT = 143,
         MSG_DO_FORCE_ATTACK_GROUND_HINT = 144,
         MSG_GET_REPAIRED_HINT = 145,
@@ -235,6 +243,7 @@ public:
         MSG_SNIPE_VEHICLE_HINT = 159,
         MSG_DEFECTOR_HINT = 160,
         MSG_SET_RALLY_POINT_HINT = 161,
+        MSG_UNK2 = 162,
         MSG_DO_SALVAGE_HINT = 163,
         MSG_DO_INVALID_HINT = 164,
         MSG_DO_ATTACK_OBJECT_AFTER_MOVING_HINT = 165,
@@ -345,20 +354,23 @@ public:
         MSG_OBJECT_JOINED_TEAM = 2005,
     };
 
+protected:
+    virtual ~GameMessage() override;
+
 public:
     GameMessage(MessageType type);
-    virtual ~GameMessage();
 
     GameMessageArgument *Allocate_Arg();
-    ArgumentType *Get_Argument(int arg);
+    ArgumentType *Get_Argument(int arg) const;
+    int Get_Argument_Count() const { return m_argCount; }
     ArgumentDataType Get_Argument_Type(int arg);
-    AsciiString Get_Command_As_Ascii(MessageType command);
+    Utf8String Get_Command_As_Ascii(MessageType command);
 
     void Append_Int_Arg(int arg);
     void Append_Real_Arg(float arg);
     void Append_Bool_Arg(bool arg);
-    void Append_ObjectID_Arg(unsigned int arg);
-    void Append_DrawableID_Arg(unsigned int arg);
+    void Append_ObjectID_Arg(ObjectID arg);
+    void Append_DrawableID_Arg(DrawableID arg);
     void Append_TeamID_Arg(unsigned int arg);
     void Append_Location_Arg(Coord3D const &arg);
     void Append_Pixel_Arg(ICoord2D const &arg);
@@ -368,6 +380,9 @@ public:
 
     GameMessage *Get_Next() { return m_next; }
     GameMessage *Get_Prev() { return m_prev; }
+
+    MessageType Get_Type() const { return m_type; }
+    int Get_Player_Index() const { return m_playerIndex; }
 
 private:
     GameMessage *m_next;
@@ -380,5 +395,3 @@ private:
     GameMessageArgument *m_argList;
     GameMessageArgument *m_argTail;
 };
-
-#endif

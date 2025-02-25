@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Handles font configurations for current language.
  *
@@ -9,23 +9,18 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
 
-#ifndef GLOBALLANGUAGE_H
-#define GLOBALLANGUAGE_H
-
+#include "always.h"
 #include "asciistring.h"
 #include "ini.h"
 #include "subsysteminterface.h"
 #include <list>
 
-#ifndef THYME_STANDALONE
-#include "hooker.h"
-#endif
+class W3DFontLibrary;
 
 class FontDesc
 {
@@ -33,13 +28,17 @@ class FontDesc
 
 public:
     FontDesc() : m_name("Arial Unicode MS"), m_pointSize(12), m_bold(false) {}
+    FontDesc(const char *name, int size = 12, bool bold = false) : m_name(name), m_pointSize(size), m_bold(bold) {}
 
-    AsciiString &Get_Font_Name() { return m_name; }
-    int Get_Point_Size() { return m_pointSize; }
-    bool Is_Bold() { return m_bold; }
+    const Utf8String &Name() const { return m_name; }
+    int Point_Size() const { return m_pointSize; }
+    bool Bold() const { return m_bold; }
+    void Set_Name(Utf8String name) { m_name = name; }
+    void Set_Point_Size(int size) { m_pointSize = size; }
+    void Set_Bold(bool bold) { m_bold = bold; }
 
 private:
-    AsciiString m_name;
+    Utf8String m_name;
     int m_pointSize;
     bool m_bold;
 };
@@ -47,6 +46,9 @@ private:
 class GlobalLanguage : public SubsystemInterface
 {
 public:
+    friend W3DFontLibrary;
+    friend class W3DDisplayString;
+
     GlobalLanguage();
     virtual ~GlobalLanguage() {}
 
@@ -54,13 +56,35 @@ public:
     virtual void Reset() override {}
     virtual void Update() override {}
 
-    static void Parse_Language_Defintions(INI *ini);
+    int Adjust_Font_Size(int size);
+
+    const FontDesc &Copyright_Font() const { return m_copyrightFont; }
+    const FontDesc &Message_Font() const { return m_messageFont; }
+    const FontDesc &Military_Caption_Title_Font() const { return m_militaryCaptionTitleFont; }
+    const FontDesc &Military_Caption_Font() const { return m_militaryCaptionFont; }
+    const FontDesc &Superweapon_Countdown_Normal_Font() const { return m_superweaponCountdownNormalFont; }
+    const FontDesc &Superweapon_Countdown_Ready_Font() const { return m_superweaponCountdownReadyFont; }
+    const FontDesc &Named_Timer_Countdown_Normal_Font() const { return m_namedTimerCountdownNormalFont; }
+    const FontDesc &Named_Timer_Countdown_Ready_Font() const { return m_namedTimerCountdownReadyFont; }
+    const FontDesc &Drawable_Caption_Font() const { return m_drawableCaptionFont; }
+    const FontDesc &Default_Window_Font() const { return m_defaultWindowFont; }
+    const FontDesc &Default_Display_String_Font() const { return m_defaultDisplayStringFont; }
+    const FontDesc &Tooltip() const { return m_tooltipFont; }
+    const FontDesc &Debug_Display_Font() const { return m_nativeDebugDisplayFont; }
+    const FontDesc &Draw_Group_Info_Font() const { return m_drawGroupInfoFont; }
+    const FontDesc &Credits_Title_Font() const { return m_drawGroupInfoFont; }
+    const FontDesc &Credits_Minor_Title_Font() const { return m_creditsMinorTitleFont; }
+    const FontDesc &Credits_Normal_Font() const { return m_creditsNormalFont; }
+    int Get_Military_Caption_Delay_MS() const { return m_militaryCaptionDelayMs; }
+    int Get_Military_Caption_Speed() const { return m_militaryCaptionSpeed; }
+
+    static void Parse_Language_Definition(INI *ini);
     static void Parse_Font_Filename(INI *ini, void *formal, void *store, void const *user_data);
     static void Parse_FontDesc(INI *ini, void *formal, void *store, void const *user_data);
 
 private:
-    AsciiString m_unicodeFontName;
-    AsciiString m_unkAsciiString;
+    Utf8String m_unicodeFontName;
+    Utf8String m_unkAsciiString;
     bool m_useHardWordWrap;
     int m_militaryCaptionSpeed;
     int m_militaryCaptionDelayMs;
@@ -82,15 +106,13 @@ private:
     FontDesc m_creditsMinorTitleFont;
     FontDesc m_creditsNormalFont;
     float m_resolutionFontAdjustment;
-    std::list<AsciiString> m_localFontFiles;
+    std::list<Utf8String> m_localFontFiles;
 
-    static FieldParse s_languageParseTable[];
+    static const FieldParse s_languageParseTable[];
 };
 
-#ifndef THYME_STANDALONE
+#ifdef GAME_DLL
 extern GlobalLanguage *&g_theGlobalLanguage;
 #else
 extern GlobalLanguage *g_theGlobalLanguage;
 #endif
-
-#endif // GLOBALLANGUAGE_H

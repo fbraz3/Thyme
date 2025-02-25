@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Class for handling various global variables.
  *
@@ -9,15 +9,12 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
 
-#ifndef GLOBALDATA_H
-#define GLOBALDATA_H
-
+#include "always.h"
 #include "asciistring.h"
 #include "color.h"
 #include "coord.h"
@@ -25,10 +22,6 @@
 #include "ini.h"
 #include "money.h"
 #include "subsysteminterface.h"
-
-#ifndef THYME_STANDALONE
-#include "hooker.h"
-#endif
 
 class INI;
 class WeaponBonusSet;
@@ -50,6 +43,7 @@ enum TerrainLOD
     TERRAIN_LOD_DISABLE,
     TERRAIN_LOD_NUM_TYPES,
 };
+DEFINE_ENUMERATION_OPERATORS(TerrainLOD);
 
 class GlobalData : public SubsystemInterface
 {
@@ -65,21 +59,22 @@ public:
     virtual ~GlobalData();
 
     // m_subsystemInterface implementation
-    virtual void Init() {}
-    virtual void Reset();
-    virtual void Update() {}
+    virtual void Init() override {}
+    virtual void Reset() override;
+    virtual void Update() override {}
 
     bool Set_Time_Of_Day(TimeOfDayType time);
 
-    static void Parse_Game_Data_Definitions(INI *ini);
-    static void Hook_Me();
+    Utf8String Get_Path_User_Data() const { return m_userDataDirectory; }
+
+    static void Parse_Game_Data_Definition(INI *ini);
     // Looks like members are likely public or there would have been a lot of
     // getters/setters.
     // pad indicates where padding will be added to keep 4 byte alignment
     // useful if we want to cram any extra variables in without breaking ABI
 public:
-    AsciiString m_mapName;
-    AsciiString m_moveHintName;
+    Utf8String m_mapName;
+    Utf8String m_moveHintName;
     bool m_useTrees;
     bool m_useTreeSway;
     bool m_extraAnimationsDisabled;
@@ -128,13 +123,13 @@ public:
     float m_waterExtentY;
     int32_t m_waterType;
     bool m_showSoftWaterEdge;
-    bool m_unkBool6;
-    bool m_unkBool7;
+    bool m_useWaveEditor;
+    bool m_unsortedShoreLines;
     // char pad[1]
-    float m_featherWater;
-    AsciiString m_vertexWaterAvailableMaps[4];
+    int m_featherWater;
+    Utf8String m_vertexWaterAvailableMaps[4];
     float m_vertexWaterHeightClampLow[4];
-    float m_vertexWaterHeightClampLHigh[4];
+    float m_vertexWaterHeightClampHigh[4];
     float m_vertexWaterAngle[4];
     float m_vertexWaterXPos[4];
     float m_vertexWaterYPos[4];
@@ -148,8 +143,7 @@ public:
     float m_vertexWaterAttenuationRange[4];
     float m_downWindAngle;
     float m_skyBoxPositionZ;
-    bool m_drawSkyBox; // init code suggests this might be an int, old BOOL typedef?
-    // char pad[3]
+    float m_drawSkyBox; // is used as a bool and appears to be defined wrong
     float m_skyBoxScale;
     float m_cameraPitch;
     float m_cameraYaw;
@@ -164,9 +158,9 @@ public:
     float m_gravity;
     float m_stealthFriendlyOpacity;
     uint32_t m_defaultOcclusionDelay;
-    bool m_unkBool12;
-    bool m_unkBool13;
-    bool m_unkBool14;
+    bool m_preloadAssets;
+    bool m_preloadEverything;
+    bool m_logAssets;
     // char pad[1]
     float m_partitionCellSize;
     Coord3D m_ammoPipWorldOffset;
@@ -180,10 +174,10 @@ public:
     int32_t m_maxTankTrackEdges;
     int32_t m_maxTankTrackOpaqueEdges;
     int32_t m_maxTankTrackFadeDelay;
-    AsciiString m_levelGainAnimName;
+    Utf8String m_levelGainAnimName;
     float m_levelGainAnimTime;
     float m_levelGainAnimZRise;
-    AsciiString m_getHealedAnimName;
+    Utf8String m_getHealedAnimName;
     float m_getHealedAnimTime;
     float m_getHealedAnimZRise;
     TimeOfDayType m_timeOfDay;
@@ -197,22 +191,13 @@ public:
     RGBColor m_terrainAmbient[LIGHT_COUNT];
     RGBColor m_terrainDiffuse[LIGHT_COUNT];
     Coord3D m_terrainLightPos[LIGHT_COUNT];
-    float m_unkFloat2;
-    float m_infantryLightMorningScale;
-    float m_infantryLightAfternoonScale;
-    float m_infantryLightEveningScale;
-    float m_infantryLightNightScale;
-    float m_unkFloat3;
-    float m_easySoloHumanHealthBonus;
-    float m_normalSoloHumanHealthBonus;
-    float m_hardSoloHumanHealthBonus;
-    float m_easySoloAIHealthBonus;
-    float m_normalSoloAIHealthBonus;
-    float m_hardSoloAIHealthBonus;
+    float m_infantryLight[TIME_OF_DAY_COUNT];
+    float m_infantryLightOverride; // Based on ScriptAction::doSetInfantryLightingOverride
+    float m_soloHealthBonus[2][DIFFICULTY_COUNT]; // for first array, 0 is human, 1 is AI
     int32_t m_maxTranslucencyObjects;
-    int32_t m_unkInt5; // These 3 are probably some kind of max and get set to 512
-    int32_t m_unkInt6;
-    int32_t m_unkInt7;
+    int32_t m_maxOccludedBuildings;
+    int32_t m_maxOccludedObjects;
+    int32_t m_maxOccludedOthers;
     float m_occludedColorLuminanceScale;
     int32_t m_numberGlobalLights;
     int32_t m_maxRoadSegments;
@@ -226,48 +211,53 @@ public:
     bool m_speechOn;
     bool m_videoOn;
     bool m_disableCameraMovements;
-    bool m_fogOfWarOn; // not 100% sure about this, needs confirming
+    bool m_useFX;
     bool m_showClientPhysics;
     bool m_showTerrainNormals;
     // char pad[2]
-    float m_unkFloat4;
+    int32_t m_frameToJumpTo; // Perhaps not a float, set to frame number in worldbuilder as an int.
     int32_t m_debugAI; // Possibly old BOOL typedef for int?, keep int for ABI compat until sure
-    bool m_unkBool8;
+    bool m_logSupplyCenterPlacement;
     bool m_debugObstacleAI;
     bool m_showObjectHealth;
     bool m_scriptDebug; // Requires DebugWindow.dll to do anything
     bool m_particleEdit; // Requires ParticleEditor.dll to do anything
     bool m_displayDebug; // not 100% sure and needs confirming
     bool m_winCursors;
-    bool m_unkBool9;
-    bool m_benchMark;
+    bool m_constantDebugUpdate;
+    bool m_showTeamDot;
+#ifdef GAME_DEBUG_STRUCTS
+    bool m_doStatDump;
+    bool m_doStats;
+    uint32_t m_statsInterval;
+#endif
     bool m_writeBenchMarkFile;
     // char pad[2]
     int32_t m_fixedSeed;
     float m_particleScale;
-    AsciiString m_autoFireParticleSmallPrefix;
-    AsciiString m_autoFireParticleSmallSystem;
+    Utf8String m_autoFireParticleSmallPrefix;
+    Utf8String m_autoFireParticleSmallSystem;
     int32_t m_autoFireParticleSmallMax;
-    AsciiString m_autoFireParticleMediumPrefix;
-    AsciiString m_autoFireParticleMediumSystem;
+    Utf8String m_autoFireParticleMediumPrefix;
+    Utf8String m_autoFireParticleMediumSystem;
     int32_t m_autoFireParticleMediumMax;
-    AsciiString m_autoFireParticleLargePrefix;
-    AsciiString m_autoFireParticleLargeSystem;
+    Utf8String m_autoFireParticleLargePrefix;
+    Utf8String m_autoFireParticleLargeSystem;
     int32_t m_autoFireParticleLargeMax;
-    AsciiString m_autoSmokeParticleSmallPrefix;
-    AsciiString m_autoSmokeParticleSmallSystem;
+    Utf8String m_autoSmokeParticleSmallPrefix;
+    Utf8String m_autoSmokeParticleSmallSystem;
     int32_t m_autoSmokeParticleSmallMax;
-    AsciiString m_autoSmokeParticleMediumPrefix;
-    AsciiString m_autoSmokeParticleMediumSystem;
+    Utf8String m_autoSmokeParticleMediumPrefix;
+    Utf8String m_autoSmokeParticleMediumSystem;
     int32_t m_autoSmokeParticleMediumMax;
-    AsciiString m_autoSmokeParticleLargePrefix;
-    AsciiString m_autoSmokeParticleLargeSystem;
+    Utf8String m_autoSmokeParticleLargePrefix;
+    Utf8String m_autoSmokeParticleLargeSystem;
     int32_t m_autoSmokeParticleLargeMax;
-    AsciiString m_autoAFlameParticlePrefix;
-    AsciiString m_autoAFlameParticleSystem;
+    Utf8String m_autoAFlameParticlePrefix;
+    Utf8String m_autoAFlameParticleSystem;
     int32_t m_autoAFlameParticleMax;
     int32_t m_netMinPlayers; // not 100% sure, needs confirming
-    int32_t m_lanIPAddress;
+    int32_t m_defaultIP;
     int32_t m_firewallBehaviour;
     bool m_sendDelay;
     // char pad[3]
@@ -293,24 +283,24 @@ public:
     float m_scrollAmountCutoff;
     float m_cameraAdjustSpeed;
     bool m_enforceMaxCameraHeight;
-    bool m_buildMapCache; // not 100% sure, needs confirming
+    bool m_buildMapCache;
     // char pad[2]
-    AsciiString m_initialFile; // not 100% sure, needs confirming
-    AsciiString m_pendingFile; // not 100% sure, needs confirming
+    Utf8String m_initialFile;
+    Utf8String m_pendingFile;
     int32_t m_maxParticleCount;
     int32_t m_maxFieldParticleCount;
-    WeaponBonusSet *m_weaponBonusSetPtr;
-    float m_unkFloat5;
+    WeaponBonusSet *m_weaponBonusSet;
+    float m_normalHealthBonus;
     float m_veteranHealthBonus;
     float m_eliteHealthBonus;
     float m_heroicHealthBonus;
     float m_defaultStructureRubbleHeight;
-    AsciiString m_shellMapName;
+    Utf8String m_shellMapName;
     bool m_shellMapOn;
     bool m_playIntro;
     bool m_playSizzle;
     bool m_afterIntro;
-    bool m_unkBool16;
+    bool m_allowSkipMovie;
     bool m_unkBool17;
     // char pad[2]
     float m_keyboardScrollFactor;
@@ -320,7 +310,7 @@ public:
     float m_voiceVolumeFactor; // not 100% sure, needs confirming
     bool m_sound3DPref; // not 100% sure, needs confirming
     bool m_animateWindows;
-    bool m_setMinVertextBufferSize; // not 100% sure, needs confirming
+    bool m_setMinVertexBufferSize; // not 100% sure, needs confirming
     // char pad[1]
     uint32_t m_iniCRC;
     uint32_t m_gameCRC;
@@ -336,8 +326,8 @@ public:
     float m_groupMoveClickToGatherAreaFactor;
     int32_t m_antiAliasBoxValue; // could be float
     bool m_languageFilter;
-    bool m_unkBool20;
-    bool m_unkBool21;
+    bool m_loadScreenDemo;
+    bool m_demoToggleRender;
     bool m_saveCameraInReplays;
     bool m_useCameraInReplays;
     // char pad[3]
@@ -353,14 +343,14 @@ public:
     float m_baseRegenHealthPercentPerSecond;
     uint32_t m_baseRegenDelay;
     int32_t m_hotKeytextColor;
-    AsciiString m_specialPowerViewObject;
-    std::vector<AsciiString> m_standardPublicBones;
+    Utf8String m_specialPowerViewObject;
+    std::vector<Utf8String> m_standardPublicBones;
     float m_standardMinefieldDensity;
     float m_standardMinefieldDistance;
     bool m_showMetrics;
     // char pad[3]
     Money m_defaultStartingCash;
-    bool m_unkBool22;
+    bool m_showFrameRateBar;
     // char pad[3]
     int32_t m_powerBarBase;
     float m_powerBarIntervals;
@@ -370,9 +360,6 @@ public:
     bool m_updateTGAtoDDS;
     // char pad[3]
     int32_t m_doubleClickTime;
-    // int32_t m_shroudColor;
-    // float m_unkFloat6;
-    // float m_unkFloat7;
     RGBColor m_shroudColor;
     uint8_t m_clearAlpha;
     uint8_t m_fogAlpha;
@@ -389,29 +376,77 @@ public:
     int32_t m_networkDisconnectScreenNotifyTime;
     float m_keyboardCameraRotateSpeed;
     int32_t m_playerStats;
-    bool m_unkBool24;
+    bool m_demoToggleSpecialPowerDelays;
+#ifdef GAME_DEBUG_STRUCTS
+    bool m_TiVOFastMode;
+    bool m_wireframe;
+    bool m_stateMachineDebug;
+    bool m_useCameraConstraints;
+    bool m_shroudOn;
+    bool m_fogOfWarOn;
+    bool m_jabberOn;
+    bool m_munkeeOn;
+    bool m_selectTheUnselectable;
+    bool m_disableCameraFade;
+    bool m_disableScriptedInputDisabling;
+    bool m_disableMilitaryCaption;
+    // pad[3]
+    int32_t m_benchmarkTimer; // Type to confirm.
+    bool m_checkMemoryLeaks;
+    bool m_vTune;
+    bool m_cameraDebug;
+    bool m_debugVisibility;
+    int32_t m_debugVisibilityTileCount; // Type to confirm.
+    int32_t m_debugVisibilityTileWidth; // Type to confirm.
+    int32_t m_debugVisibilityTileDuration; // Type to confirm.
+    bool m_debugMapThreat;
+    // pad[3]
+    int32_t m_maxDebugThreatMapValue; // Type to confirm.
+    int32_t m_debugThreatMapTileDuration; // Type to confirm.
+    bool m_debugMapCash;
+    // pad[3]
+    int32_t m_maxDebugCashValueMapValue; // Type to confirm.
+    int32_t m_debugCashValueMapTileDuration; // Type to confirm.
+    RGBColor m_debugVisibilityTileTargettableColor;
+    RGBColor m_debugVisibilityTileDeshroudColor;
+    RGBColor m_debugVisibilityTileGapColor;
+    bool m_debugProjectilePath;
+    // pad[3]
+    int32_t m_debugProjectileTileWidth; // Type to confirm.
+    int32_t m_debugProjectileTileDuration; // Type to confirm.
+    RGBColor m_debugProjectileTileColor;
+    bool m_ignoreAsserts;
+    bool m_ignoreStackTrace;
+    bool m_showCollisionExtents;
+    bool m_showAudioLocations;
+    bool m_saveStats;
+    bool m_saveAllStats;
+    bool m_useLocalMOTD;
+    // pad[1]
+    Utf8String m_baseStatsDir;
+    Utf8String m_localMOTDPath;
+    int32_t m_latencyAverage; // Type to confirm.
+    int32_t m_latencyAmplitude; // Type to confirm.
+    int32_t m_latencyPeriod; // Type to confirm.
+    int32_t m_latencyNoise; // Type to confirm.
+    int32_t m_packetLoss; // Type to confirm.
+    bool m_extraLogging; // Type to confirm.
+#endif
     bool m_unkBool25;
     bool m_unkBool26;
     // char pad[1]
-    AsciiString m_userModDirectory;
-    AsciiString m_userModFile;
-    AsciiString m_userDataDirectory;
+    Utf8String m_userModDirectory;
+    Utf8String m_userModFile;
+    Utf8String m_userDataDirectory;
     GlobalData *m_next;
 
 private:
-    static FieldParse s_fieldParseTable[337];
+    static const FieldParse s_fieldParseTable[337];
     static GlobalData *s_theOriginal;
 };
 
-#ifndef THYME_STANDALONE
-inline void GlobalData::Hook_Me()
-{
-    Hook_Function(0x00418090, Parse_Game_Data_Definitions);
-}
-
+#ifdef GAME_DLL
 extern GlobalData *&g_theWriteableGlobalData;
 #else
 extern GlobalData *g_theWriteableGlobalData;
-#endif
-
 #endif

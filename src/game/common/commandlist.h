@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Command message list handling.
  *
@@ -9,45 +9,34 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
 
-#ifndef COMMANDLIST_H
-#define COMMANDLIST_H
-
+#include "always.h"
 #include "gamemessagelist.h"
 
 class CommandList : public GameMessageList
 {
+    ALLOW_HOOKING
 public:
+    CommandList() {}
+
     // SubsystemInterface implementations
-    virtual ~CommandList();
-    virtual void Init() {}
-    virtual void Reset();
-    virtual void Update() {}
+    virtual ~CommandList() override;
+    virtual void Init() override;
+    virtual void Reset() override;
+    virtual void Update() override;
 
     void Append_Message_List(GameMessage *list);
 
-#ifndef THYME_STANDALONE
-    static void Hook_Me();
-#endif
 private:
     void Destroy_All_Messages();
 };
 
-#ifndef THYME_STANDALONE
+#ifdef GAME_DLL
 extern CommandList *&g_theCommandList;
-
-inline void CommandList::Hook_Me()
-{
-    // This one actually replaces Reset as it is just inlined Destroy_All_Messages
-    Hook_Method(0x0040DD70, &Destroy_All_Messages);
-}
 #else
 extern CommandList *g_theCommandList;
-#endif
-
 #endif

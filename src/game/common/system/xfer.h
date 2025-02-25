@@ -1,43 +1,42 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: XFER.H
-//
-//        Author:: OmniBlade
-//
-//  Contributors:: 
-//
-//   Description:: Some transfer thing interface.
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief Some data transfer interface?
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #pragma once
 
-#ifndef XFER_H
-#define XFER_H
-
+#include "always.h"
 #include "asciistring.h"
-#include "bitflags.h"
-#include "color.h"
-#include "coord.h"
 #include "gametype.h"
 #include "kindof.h"
-#include "matrix3d.h"
 #include "science.h"
-#include "snapshot.h"
-#include "unicodestring.h"
 #include <list>
 #include <vector>
+
+template<int bits> class BitFlags;
+class Coord3D;
+class Coord2D;
+class ICoord2D;
+class ICoord3D;
+class IRegion2D;
+class IRegion3D;
+class Matrix3D;
+class Region2D;
+class Region3D;
+class RGBColor;
+class RGBAColorReal;
+class RGBAColorInt;
+class Utf16String;
+class SnapShot;
 
 struct RealRange
 {
@@ -45,15 +44,38 @@ struct RealRange
     float hi;
 };
 
-typedef int DrawableID;
-
 enum XferType
 {
-    XFER_INVALID = 0,
-    XFER_SAVE    = 1,
-    XFER_LOAD    = 2,
-    XFER_CRC     = 3,
+    XFER_INVALID,
+    XFER_SAVE,
+    XFER_LOAD,
+    XFER_CRC,
 };
+
+enum XferStatus
+{
+    XFER_STATUS_INVALID,
+    XFER_STATUS_OK,
+    XFER_STATUS_EOF,
+    XFER_STATUS_FILE_NOT_FOUND,
+    XFER_STATUS_FILE_NOT_OPEN,
+    XFER_STATUS_FILE_ALREADY_OPEN,
+    XFER_STATUS_READ_ERROR,
+    XFER_STATUS_WRITE_ERROR,
+    XFER_STATUS_UNKNOWN_XFER_MODE,
+    XFER_STATUS_FILE_SEEK_ERROR,
+    XFER_STATUS_NO_BEGIN_BLOCK,
+    XFER_STATUS_UNK11,
+    XFER_STATUS_STRING_TOO_LONG,
+    XFER_STATUS_UNKNOWN_VERSION,
+    XFER_STATUS_INVALID_PARAMETERS,
+    XFER_STATUS_NOT_EMPTY,
+    XFER_STATUS_NOT_FOUND,
+    NUM_XFER_STATUS,
+};
+
+class GameClientRandomVariable;
+class GameLogicRandomVariable;
 
 class Xfer
 {
@@ -62,11 +84,11 @@ public:
     virtual ~Xfer() {}
 
     virtual XferType Get_Mode() { return m_type; }
-    virtual void Set_Options(unsigned int options) { m_options |= options; }
-    virtual void Clear_Options(unsigned int options) { m_options &= ~options; }
-    virtual unsigned int Get_Options(void) { return m_options; }
+    virtual void Set_Options(unsigned options) { m_options |= options; }
+    virtual void Clear_Options(unsigned options) { m_options &= ~options; }
+    virtual unsigned Get_Options() { return m_options; }
 
-    virtual void Open(AsciiString filename);
+    virtual void Open(Utf8String filename);
     virtual void Close() = 0;
     virtual int Begin_Block() = 0;
     virtual void End_Block() = 0;
@@ -83,9 +105,9 @@ public:
     virtual void xferShort(int16_t *thing);
     virtual void xferUnsignedShort(uint16_t *thing);
     virtual void xferReal(float *thing);
-    virtual void xferMarkerLabel(AsciiString thing);
-    virtual void xferAsciiString(AsciiString *thing);
-    virtual void xferUnicodeString(UnicodeString *thing);
+    virtual void xferMarkerLabel(Utf8String thing);
+    virtual void xferAsciiString(Utf8String *thing);
+    virtual void xferUnicodeString(Utf16String *thing);
     virtual void xferCoord3D(Coord3D *thing);
     virtual void xferICoord3D(ICoord3D *thing);
     virtual void xferRegion3D(Region3D *thing);
@@ -95,7 +117,7 @@ public:
     virtual void xferRegion2D(Region2D *thing);
     virtual void xferIRegion2D(IRegion2D *thing);
     virtual void xferRealRange(RealRange *thing);
-    virtual void xferColor(int32_t thing);
+    virtual void xferColor(int32_t *thing);
     virtual void xferRGBColor(RGBColor *thing);
     virtual void xferRGBAColorReal(RGBAColorReal *thing);
     virtual void xferRGBAColorInt(RGBAColorInt *thing);
@@ -110,13 +132,18 @@ public:
     virtual void xferUpgradeMask(BitFlags<128> *thing);
     virtual void xferUser(void *thing, int size);
     virtual void xferMatrix3D(Matrix3D *thing);
-    virtual void xferMapName(AsciiString *thing);
+    virtual void xferMapName(Utf8String *thing);
     virtual void xferImplementation(void *thing, int size) = 0;
 
+    void Xfer_Client_Random_Var(GameClientRandomVariable *thing);
+    void Xfer_Logic_Random_Var(GameLogicRandomVariable *thing);
+
 protected:
-    unsigned int m_options;
+    unsigned m_options;
     XferType m_type;
-    AsciiString m_filename;
+    Utf8String m_filename;
 };
 
-#endif // _XFER_H
+#ifdef GAME_DLL
+#include "hooker.h"
+#endif

@@ -1,34 +1,20 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: SYSTIMER.H
-//
-//        Author:: OmniBlade
-//
-//  Contributors:: 
-//
-//   Description:: Tracks the system time.
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief Tracks system time.
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #pragma once
 
-#ifndef SYSTIMER_H
-#define SYSTIMER_H
-
-#ifndef THYME_STANDALONE
-#include "hooker.h"
-#endif
+#include "always.h"
 
 #ifdef PLATFORM_WINDOWS
 #include <mmsystem.h>
@@ -44,9 +30,10 @@ public:
 
     int Get();
     bool Is_Getting_Late();
+
 private:
     void Reset();
-    static int Time_Func();
+    static unsigned Time_Func();
 
     int m_startTime;
     int m_negTime;
@@ -66,21 +53,11 @@ inline SysTimeClass::~SysTimeClass()
 #endif
 }
 
-inline int SysTimeClass::Time_Func()
-{
-#ifdef PLATFORM_WINDOWS
-    return timeGetTime();
-#else
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    return now.tv_usec / 1000;
-#endif
-}
+#ifdef GAME_DLL
+#include "hooker.h"
 
-#ifdef THYME_STANDALONE
-extern SysTimeClass g_theSysTimer;
-#else
+// This needs to stay here like this to avoid static init issues in cpudetect.
 #define g_theSysTimer (Make_Global<SysTimeClass>(0x00A66B30))
+#else
+extern SysTimeClass g_theSysTimer;
 #endif
-
-#endif // SYSTIMER_H

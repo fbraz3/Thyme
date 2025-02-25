@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Classes for handling terrain textures and properties.
  *
@@ -9,24 +9,16 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
-
-#ifndef TERRAINTYPES_H
-#define TERRAINTYPES_H
 
 #include "always.h"
 #include "asciistring.h"
 #include "ini.h"
 #include "mempoolobj.h"
 #include "subsysteminterface.h"
-
-#ifndef THYME_STANDALONE
-#include "hooker.h"
-#endif
 
 enum TerrainClass : int32_t
 {
@@ -76,13 +68,20 @@ class TerrainType : public MemoryPoolObject
     IMPLEMENT_POOL(TerrainType);
     friend class TerrainTypeCollection;
 
+protected:
+    virtual ~TerrainType() override {}
+
 public:
     TerrainType();
-    virtual ~TerrainType() {}
+    Utf8String Get_Texture() { return m_texture; }
+    Utf8String Get_Name() { return m_name; }
+    bool Is_Blend_Edge() { return m_blendEdgeTexture; }
+    TerrainClass Get_Class() { return m_class; }
+    TerrainType *Friend_Get_Next() { return m_next; }
 
 private:
-    AsciiString m_name;
-    AsciiString m_texture;
+    Utf8String m_name;
+    Utf8String m_texture;
     bool m_blendEdgeTexture;
     TerrainClass m_class;
     bool m_restrictConstruction;
@@ -100,21 +99,21 @@ public:
     virtual void Reset() override{};
     virtual void Update() override{};
 
-    TerrainType *Find_Terrain(AsciiString name);
-    TerrainType *New_Terrain(AsciiString name);
+    TerrainType *Find_Terrain(Utf8String name);
+    TerrainType *New_Terrain(Utf8String name);
+    TerrainType *First_Terrain() { return m_terrainList; }
+    TerrainType *Next_Terrain(TerrainType *terrain) { return terrain->Friend_Get_Next(); }
 
     static void Parse_Terrain_Definition(INI *ini);
 
 private:
     TerrainType *m_terrainList;
 
-    static FieldParse s_terrainTypeParseTable[];
+    static const FieldParse s_terrainTypeParseTable[];
 };
 
-#ifndef THYME_STANDALONE
+#ifdef GAME_DLL
 extern TerrainTypeCollection *&g_theTerrainTypes;
 #else
 extern TerrainTypeCollection *g_theTerrainTypes;
 #endif
-
-#endif // TERRAINTYPES_H

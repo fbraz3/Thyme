@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Filesystem abstraction merging local and archive file handling.
  *
@@ -9,7 +9,6 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
@@ -18,9 +17,7 @@
 #include "localfilesystem.h"
 #include "namekeygenerator.h"
 
-#ifndef THYME_STANDALONE
-FileSystem *&g_theFileSystem = Make_Global<FileSystem *>(0x00A2B670);
-#else
+#ifndef GAME_DLL
 FileSystem *g_theFileSystem = nullptr;
 #endif
 
@@ -42,7 +39,7 @@ void FileSystem::Update()
     g_theArchiveFileSystem->Update();
 }
 
-File *FileSystem::Open(const char *filename, int mode)
+File *FileSystem::Open_File(const char *filename, int mode)
 {
     File *file = nullptr;
 
@@ -57,63 +54,67 @@ File *FileSystem::Open(const char *filename, int mode)
     return file;
 }
 
-bool FileSystem::Does_File_Exist(const char *filename)
+bool FileSystem::Does_File_Exist(const char *filename) const
 {
     NameKeyType name_id = g_theNameKeyGenerator->Name_To_Lower_Case_Key(filename);
-
     auto it = m_availableFiles.find(name_id);
 
     if (it != m_availableFiles.end()) {
         return it->second;
     }
 
-    if (g_theLocalFileSystem->Does_File_Exist(filename)) {
+    if (g_theLocalFileSystem->Does_File_Exist(filename) || g_theArchiveFileSystem->Does_File_Exist(filename)) {
         m_availableFiles[name_id] = true;
-
         return true;
-    }
-
-    if (g_theArchiveFileSystem->Does_File_Exist(filename)) {
-        m_availableFiles[name_id] = true;
-
-        return true;
-    }
-
-    m_availableFiles[name_id] = false;
-
-    return false;
-}
-
-void FileSystem::Get_File_List_From_Dir(AsciiString const &dir, AsciiString const &filter,
-    std::set<AsciiString, rts::less_than_nocase<AsciiString>> &filelist, bool search_subdirs)
-{
-    g_theLocalFileSystem->Get_File_List_From_Dir("", dir, filter, filelist, search_subdirs);
-    g_theArchiveFileSystem->Get_File_List_From_Dir("", dir, filter, filelist, search_subdirs);
-}
-
-bool FileSystem::Create_Dir(AsciiString name)
-{
-    if (g_theLocalFileSystem == nullptr) {
+    } else {
+        m_availableFiles[name_id] = false;
         return false;
     }
+}
 
-    return g_theLocalFileSystem->Create_Directory(name);
+void FileSystem::Get_File_List_In_Directory(Utf8String const &dir,
+    Utf8String const &filter,
+    std::set<Utf8String, rts::less_than_nocase<Utf8String>> &filelist,
+    bool search_subdirs) const
+{
+    g_theLocalFileSystem->Get_File_List_In_Directory("", dir, filter, filelist, search_subdirs);
+    g_theArchiveFileSystem->Get_File_List_In_Directory("", dir, filter, filelist, search_subdirs);
+}
+
+bool FileSystem::Create_Directory(Utf8String name)
+{
+    if (g_theLocalFileSystem != nullptr) {
+        return g_theLocalFileSystem->Create_Directory(name);
+    } else {
+        return false;
+    }
 }
 
 bool FileSystem::Are_Music_Files_On_CD()
 {
-    // TODO do we want to implement correct CD handling given most new copies will be digital download?
-    // Mac version just returns true here.
+    // This doesn't need implementing as its never called (it was originally called by IsFirstCDPresent,
+    // CheckForCDAtGameStart and checkCDCallback but our implementation patches those so its never called anymore)
     return true;
 }
 
-bool FileSystem::Load_Music_Files_From_CD()
+void FileSystem::Load_Music_Files_From_CD()
 {
-    // TODO needs CDManager
-    return false;
+    // This doesn't need implementing as its never called (it was originally called by AudioManager::Init but ours doesn't
+    // call it anymore)
 }
 
 void FileSystem::Unload_Music_Files_From_CD()
 {
-    // TODO Needs audio interface.
+    // Because Is_Music_Playing_From_CD will always return false, this is a no-op and does not need implementing
+}
+
+bool FileSystem::Get_File_Info(const Utf8String &filename, FileInfo *info) const
+{
+    if (!info) {
+        return false;
+    }
+
+    memset(info, 0, sizeof(FileInfo));
+
+    return g_theLocalFileSystem->Get_File_Info(filename, info) || g_theArchiveFileSystem->Get_File_Info(filename, info) != 0;
 }

@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Hooks for CRT functions to ensure Thyme calls the same verions as the original for functions that maintain state.
  *
@@ -9,14 +9,10 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
-
-#ifndef HOOK_CRT_H
-#define HOOK_CRT_H
 
 #include "hooker.h"
 
@@ -39,6 +35,7 @@
 #endif
 #define free crt_free
 
-// Define additional unimplemented functions that are used in more than one location
-#define Get_Registry_Language (Make_Function_Ptr<AsciiString>(0x00498E40))
-#endif // _HOOK_CRT_H
+#ifdef strtok
+#undef strtok
+#endif
+#define strtok crt_strtok

@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief Interface for UI function pointer manager.
  *
@@ -9,31 +9,20 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
 
-#ifndef FUNCTIONLEXICON_H
-#define FUNCTIONLEXICON_H
-
+#include "always.h"
+#include "gamewindow.h"
 #include "namekeygenerator.h"
 #include "subsysteminterface.h"
-
-#ifndef THYME_STANDALONE
-#include "hooker.h"
-#endif
-
-class GameWindow;
-class WinInstanceData;
-class WinLayout;
-
-typedef void (*drawfunc_t)(GameWindow *, WinInstanceData *);
-typedef void (*layoutfunc_t)(WinLayout *, void *);
+#include "windowlayout.h"
 
 class FunctionLexicon : public SubsystemInterface
 {
+    ALLOW_HOOKING
 public:
     enum TableIndex
     {
@@ -66,12 +55,34 @@ public:
     virtual void Update() override {}
 
     void *Find_Function(NameKeyType key, TableIndex index);
-    drawfunc_t Game_Win_Draw_Func(NameKeyType key, TableIndex index);
-    layoutfunc_t Win_Layout_Init_Func(NameKeyType key, TableIndex index);
+    WindowDrawFunc Game_Win_Draw_Func(NameKeyType key, TableIndex index);
+    WindowLayoutCallbackFunc Win_Layout_Init_Func(NameKeyType key, TableIndex index);
 
-#ifndef THYME_STANDALONE
-    static void Hook_Me();
-#endif
+    WindowCallbackFunc Game_Win_System_Func(NameKeyType key, TableIndex index)
+    {
+        return reinterpret_cast<WindowCallbackFunc>(Find_Function(key, index));
+    }
+
+    WindowCallbackFunc Game_Win_Input_Func(NameKeyType key, TableIndex index)
+    {
+        return reinterpret_cast<WindowCallbackFunc>(Find_Function(key, index));
+    }
+
+    WindowTooltipFunc Game_Win_Tooltip_Func(NameKeyType key, TableIndex index)
+    {
+        return reinterpret_cast<WindowTooltipFunc>(Find_Function(key, index));
+    }
+
+    WindowLayoutCallbackFunc Win_Layout_Update_Func(NameKeyType key, TableIndex index)
+    {
+        return reinterpret_cast<WindowLayoutCallbackFunc>(Find_Function(key, index));
+    }
+
+    WindowLayoutCallbackFunc Win_Layout_Shutdown_Func(NameKeyType key, TableIndex index)
+    {
+        return reinterpret_cast<WindowLayoutCallbackFunc>(Find_Function(key, index));
+    }
+
 protected:
     void Load_Table(TableEntry *table, TableIndex index);
     bool Validate();
@@ -81,15 +92,8 @@ private:
     TableEntry *m_tables[MAX_FUNCTION_TABLES];
 };
 
-#ifndef THYME_STANDALONE
-inline void FunctionLexicon::Hook_Me()
-{
-    Hook_Method(0x004F3D00, &Load_Table);
-}
-
+#ifdef GAME_DLL
 extern FunctionLexicon *&g_theFunctionLexicon;
 #else
 extern FunctionLexicon *g_theFunctionLexicon;
 #endif
-
-#endif // FUNCTIONLEXICON_H

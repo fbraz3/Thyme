@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @Author OmniBlade
+ * @author OmniBlade
  *
  * @brief String file handler.
  *
@@ -9,41 +9,34 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #pragma once
 
-#ifndef GAMETEXT_H
-#define GAMETEXT_H
-
+#include "always.h"
 #include "asciistring.h"
 #include "file.h"
 #include "subsysteminterface.h"
 #include "unicodestring.h"
 
-#ifndef THYME_STANDALONE
-#include "hooker.h"
-#endif
-
 // This enum applies to RA2/YR and Generals/ZH, BFME ID's are slightly different.
-enum LanguageID : int32_t
+enum class LanguageID : int32_t
 {
-    LANGUAGE_ID_US = 0,
-    LANGUAGE_ID_UK,
-    LANGUAGE_ID_GERMAN,
-    LANGUAGE_ID_FRENCH,
-    LANGUAGE_ID_SPANISH,
-    LANGUAGE_ID_ITALIAN,
-    LANGUAGE_ID_JAPANSE,
-    LANGUAGE_ID_JABBER,
-    LANGUAGE_ID_KOREAN,
-    LANGUAGE_ID_CHINESE,
-    LANGUAGE_ID_UNK1,
-    LANGUAGE_ID_UNK2,
-    LANGUAGE_ID_POLISH,
-    LANGUAGE_ID_UNKNOWN,
+    US = 0,
+    UK,
+    GERMAN,
+    FRENCH,
+    SPANISH,
+    ITALIAN,
+    JAPANESE,
+    JABBER,
+    KOREAN,
+    CHINESE,
+    UNK1,
+    BRAZILIAN,
+    POLISH,
+    UNKNOWN,
 };
 
 struct CSFHeader
@@ -59,19 +52,19 @@ struct CSFHeader
 struct NoString
 {
     NoString *next;
-    UnicodeString text;
+    Utf16String text;
 };
 
 struct StringInfo
 {
-    AsciiString label;
-    UnicodeString text;
-    AsciiString speech;
+    Utf8String label;
+    Utf16String text;
+    Utf8String speech;
 };
 
 struct StringLookUp
 {
-    AsciiString *label;
+    Utf8String *label;
     StringInfo *info;
 };
 
@@ -80,10 +73,10 @@ class GameTextInterface : public SubsystemInterface
 public:
     virtual ~GameTextInterface() {}
 
-    virtual UnicodeString Fetch(const char *args, bool *success = nullptr) = 0;
-    virtual UnicodeString Fetch(AsciiString args, bool *success = nullptr) = 0;
-    virtual std::vector<AsciiString> *Get_Strings_With_Prefix(AsciiString label) = 0;
-    virtual void Init_Map_String_File(AsciiString const &filename) = 0;
+    virtual Utf16String Fetch(const char *args, bool *success = nullptr) = 0;
+    virtual Utf16String Fetch(Utf8String args, bool *success = nullptr) = 0;
+    virtual std::vector<Utf8String> *Get_Strings_With_Prefix(Utf8String label) = 0;
+    virtual void Init_Map_String_File(Utf8String const &filename) = 0;
     virtual void Deinit() = 0;
 };
 
@@ -93,26 +86,24 @@ public:
     GameTextManager();
     virtual ~GameTextManager();
 
-    virtual void Init();
-    virtual void Reset();
-    virtual void Update() {}
+    virtual void Init() override;
+    virtual void Reset() override;
+    virtual void Update() override {}
 
-    virtual UnicodeString Fetch(const char *args, bool *success = nullptr);
-    virtual UnicodeString Fetch(AsciiString args, bool *success = nullptr);
-    virtual std::vector<AsciiString> *Get_Strings_With_Prefix(AsciiString label);
-    virtual void Init_Map_String_File(AsciiString const &filename);
-    virtual void Deinit();
+    virtual Utf16String Fetch(const char *args, bool *success = nullptr) override;
+    virtual Utf16String Fetch(Utf8String args, bool *success = nullptr) override;
+    virtual std::vector<Utf8String> *Get_Strings_With_Prefix(Utf8String label) override;
+    virtual void Init_Map_String_File(Utf8String const &filename) override;
+    virtual void Deinit() override;
 
     static int Compare_LUT(void const *a, void const *b);
     static GameTextInterface *Create_Game_Text_Interface();
-#ifndef THYME_STANDALONE
-    static void Hook_Me();
-#endif
+
 private:
     void Read_To_End_Of_Quote(File *file, char *in, char *out, char *wave, int buff_len);
-    void Translate_Copy(char16_t *out, char *in);
+    void Translate_Copy(unichar_t *out, char *in);
     void Remove_Leading_And_Trailing(char *buffer);
-    void Strip_Spaces(char16_t *buffer);
+    void Strip_Spaces(unichar_t *buffer);
     void Reverse_Word(char *start, char *end);
     char Read_Char(File *file);
     bool Read_Line(char *buffer, int length, File *file);
@@ -128,7 +119,7 @@ private:
     char m_bufferIn[10240];
     char m_bufferOut[10240];
     char m_bufferEx[10240];
-    char16_t m_translateBuffer[20480];
+    unichar_t m_translateBuffer[20480];
     StringInfo *m_stringInfo;
     StringLookUp *m_stringLUT;
     bool m_initialized;
@@ -137,23 +128,15 @@ private:
     bool m_useStringFile;
     // pad 3 chars
     LanguageID m_language;
-    UnicodeString m_failed;
+    Utf16String m_failed;
     StringInfo *m_mapStringInfo;
     StringLookUp *m_mapStringLUT;
     int m_mapTextCount;
-    std::vector<AsciiString> m_stringVector;
+    std::vector<Utf8String> m_stringVector;
 };
 
-#ifndef THYME_STANDALONE
-//#define g_theGameText Make_Global<GameTextInterface*>(0x00A2A2AC)
+#ifdef GAME_DLL
 extern GameTextInterface *&g_theGameText;
-inline void GameTextManager::Hook_Me()
-{
-    Hook_Function(0x00418320, &Create_Game_Text_Interface);
-    Hook_Function(0x0041A020, &Compare_LUT);
-}
 #else
 extern GameTextInterface *g_theGameText;
 #endif
-
-#endif // _GAMETEXT_H

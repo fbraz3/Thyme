@@ -1,30 +1,18 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: AUDIOMISC.H
-//
-//        Author:: OmniBlade
-//
-//  Contributors::
-//
-//   Description:: Collection of miscellaneous audio events.
-//
-//       License:: Thyme is free software: you can redistribute it and/or
-//                 modify it under the terms of the GNU General Public License
-//                 as published by the Free Software Foundation, either version
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief Class holding a collection of miscellaneous audio events.
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #pragma once
-
-#ifndef AUDIOMISC_H
-#define AUDIOMISC_H
 
 #include "always.h"
 #include "audioeventrts.h"
@@ -35,7 +23,6 @@ class MiscAudio
 public:
     static void Parse_Misc_Audio(INI *ini);
 
-private:
     AudioEventRTS m_radarNotifyUnitUnderAttack;
     AudioEventRTS m_radarNotifyHarvesterUnderAttack;
     AudioEventRTS m_radarNotifyStructureUnderAttack;
@@ -73,7 +60,5 @@ private:
     AudioEventRTS m_sabotageResetTimeBuilding;
     AudioEventRTS m_aircraftWheelScreech;
 
-    static FieldParse s_fieldParseTable[];
+    static const FieldParse s_fieldParseTable[];
 };
-
-#endif // AUDIOMISC_H

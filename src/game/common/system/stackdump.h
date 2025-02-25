@@ -15,29 +15,28 @@
  */
 #pragma once
 
-#ifndef STACKDUMP_H
-#define STACKDUMP_H
-
 #include "always.h"
 #include "asciistring.h"
 
 #ifdef PLATFORM_WINDOWS
+// clang-format off
+// Headers must be in this order.
+#include <winbase.h>
+#include <winver.h>
 #include <dbghelp.h>
 #include <eh.h>
+// clang-format on
 
-void Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info);
+void __cdecl Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info);
 BOOL Init_Symbol_Info();
 void Uninit_Symbol_Info();
-void Stack_Dump_Handler(const char *data);
-void Make_Stack_Trace(uintptr_t myeip, uintptr_t myesp, uintptr_t myebp, int skipFrames, void (*callback)(char const *));
+void __cdecl Stack_Dump_Handler(const char *data);
+void Make_Stack_Trace(
+    uintptr_t myeip, uintptr_t myesp, uintptr_t myebp, int skipFrames, void(__cdecl *callback)(char const *));
 #endif
 
-#ifndef THYME_STANDALONE
-#include "hooker.h"
-
-extern AsciiString &g_exceptionFileBuffer;
+#ifdef GAME_DLL
+extern Utf8String &g_exceptionFileBuffer;
 #else
-extern AsciiString g_exceptionFileBuffer;
-#endif
-
+extern Utf8String g_exceptionFileBuffer;
 #endif

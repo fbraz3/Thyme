@@ -9,7 +9,6 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
@@ -22,7 +21,7 @@ GameMessage::GameMessage(MessageType type) :
     m_prev(nullptr),
     m_list(nullptr),
     m_type(type),
-    m_playerIndex(ThePlayerList->Get_Local_Player()->Get_Player_Index()), // ThePlayerList->m_local->m_playerIndex
+    m_playerIndex(g_thePlayerList->Get_Local_Player()->Get_Player_Index()), // g_thePlayerList->m_local->m_playerIndex
     m_argCount(0),
     m_argList(nullptr),
     m_argTail(nullptr)
@@ -36,7 +35,7 @@ GameMessage::~GameMessage()
     while (argobj != nullptr) {
         GameMessageArgument *tmp = argobj;
         argobj = argobj->m_next;
-        Delete_Instance(tmp);
+        tmp->Delete_Instance();
     }
 
     if (m_list != nullptr) {
@@ -46,7 +45,7 @@ GameMessage::~GameMessage()
 
 GameMessageArgument *GameMessage::Allocate_Arg()
 {
-    GameMessageArgument *arg = new GameMessageArgument;
+    GameMessageArgument *arg = NEW_POOL_OBJ(GameMessageArgument);
 
     if (m_argTail != nullptr) {
         m_argTail->m_next = arg;
@@ -61,7 +60,7 @@ GameMessageArgument *GameMessage::Allocate_Arg()
     return arg;
 }
 
-ArgumentType *GameMessage::Get_Argument(int arg)
+ArgumentType *GameMessage::Get_Argument(int arg) const
 {
     static ArgumentType junkconst;
 
@@ -103,7 +102,7 @@ ArgumentDataType GameMessage::Get_Argument_Type(int arg)
     return argobj->m_type;
 }
 
-AsciiString GameMessage::Get_Command_As_Ascii(MessageType command)
+Utf8String GameMessage::Get_Command_As_Ascii(MessageType command)
 {
     switch (command) {
         case MSG_INVALID:
@@ -670,14 +669,14 @@ void GameMessage::Append_Bool_Arg(bool arg)
     argobj->m_type = ARGUMENTDATATYPE_BOOLEAN;
 }
 
-void GameMessage::Append_ObjectID_Arg(unsigned int arg)
+void GameMessage::Append_ObjectID_Arg(ObjectID arg)
 {
     GameMessageArgument *argobj = Allocate_Arg();
     argobj->m_data.objectID = arg;
     argobj->m_type = ARGUMENTDATATYPE_OBJECTID;
 }
 
-void GameMessage::Append_DrawableID_Arg(unsigned int arg)
+void GameMessage::Append_DrawableID_Arg(DrawableID arg)
 {
     GameMessageArgument *argobj = Allocate_Arg();
     argobj->m_data.drawableID = arg;

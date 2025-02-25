@@ -1,37 +1,28 @@
-////////////////////////////////////////////////////////////////////////////////
-//                               --  THYME  --                                //
-////////////////////////////////////////////////////////////////////////////////
-//
-//  Project Name:: Thyme
-//
-//          File:: CPUDETECT.H
-//
-//        Author:: OmniBlade
-//
-//  Contributors:: 
-//
-//   Description:: Class for determining CPU type.
-//
-//       License:: Thyme is free software: you can redistribute it and/or 
-//                 modify it under the terms of the GNU General Public License 
-//                 as published by the Free Software Foundation, either version 
-//                 2 of the License, or (at your option) any later version.
-//
-//                 A full copy of the GNU General Public License can be found in
-//                 LICENSE
-//
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file
+ *
+ * @author OmniBlade
+ *
+ * @brief Determine platform and operating system information.
+ *
+ * @copyright Thyme is free software: you can redistribute it and/or
+ *            modify it under the terms of the GNU General Public License
+ *            as published by the Free Software Foundation, either version
+ *            2 of the License, or (at your option) any later version.
+ *            A full copy of the GNU General Public License can be found in
+ *            LICENSE
+ */
 #pragma once
 
-#ifndef CPUDETECT_H
-#define CPUDETECT_H
-
+#include "always.h"
 #include "wwstring.h"
 
 class CPUDetectInitClass;
 
 class CPUDetectClass
 {
+    friend class CPUDetectInitClass;
+
 public:
     enum ProcessorManufacturerType
     {
@@ -131,7 +122,7 @@ public:
     };
 
     static ProcessorManufacturerType Get_Processor_Manufacturer() { return ProcessorManufacturer; }
-    static const char* Get_Processor_Manufacturer_Name();
+    static const char *Get_Processor_Manufacturer_Name();
 
     static bool Has_CPUID_Instruction() { return HasCPUIDInstruction; }
     static bool Has_RDTSC_Instruction() { return HasRDTSCInstruction; }
@@ -150,8 +141,8 @@ public:
     // Speed is calculated once during static initialisation, depending on CPU model
     // speed state of CPU could affect this.
     static int32_t Get_Processor_Speed() { return ProcessorSpeed; }
-    static int64_t Get_Processor_Ticks_Per_Second() { return ProcessorTicksPerSecond; }	// Ticks per second
-    static double Get_Inv_Processor_Ticks_Per_Second() { return InvProcessorTicksPerSecond; }	// 1.0 / Ticks per second
+    static int64_t Get_Processor_Ticks_Per_Second() { return ProcessorTicksPerSecond; } // Ticks per second
+    static double Get_Inv_Processor_Ticks_Per_Second() { return InvProcessorTicksPerSecond; } // 1.0 / Ticks per second
 
     static uint32_t Get_Feature_Bits() { return FeatureBits; }
     static uint32_t Get_Extended_Feature_Bits() { return ExtendedFeatureBits; }
@@ -185,7 +176,8 @@ public:
     static const char *Get_Compact_Log() { return CompactLog; }
 
     static bool CPUID(uint32_t &u_eax_, uint32_t &u_ebx_, uint32_t &u_ecx_, uint32_t &u_edx_, uint32_t cpuid_type);
-    static bool CPUID_Count(uint32_t &u_eax_, uint32_t &u_ebx_, uint32_t &u_ecx_, uint32_t &u_edx_, uint32_t cpuid_type, uint32_t count);
+    static bool CPUID_Count(
+        uint32_t &u_eax_, uint32_t &u_ebx_, uint32_t &u_ecx_, uint32_t &u_edx_, uint32_t cpuid_type, uint32_t count);
 
 private:
     static void Init_CPUID_Instruction();
@@ -211,18 +203,16 @@ private:
     static void Process_Extended_Cache_Info();
     static void Process_Intel_Cache_Info();
 
-    friend class CPUDetectInitClass;
-
-    static StringClass ProcessorLog;
-    static StringClass CompactLog;
+    static char ProcessorLog[1024];
+    static char CompactLog[1024];
 
     static int32_t ProcessorType;
     static int32_t ProcessorFamily;
     static int32_t ProcessorModel;
     static int32_t ProcessorRevision;
     static int32_t ProcessorSpeed;
-    static int64_t ProcessorTicksPerSecond;	// Ticks per second
-    static double InvProcessorTicksPerSecond;	// 1.0 / Ticks per second
+    static int64_t ProcessorTicksPerSecond; // Ticks per second
+    static double InvProcessorTicksPerSecond; // 1.0 / Ticks per second
 
     static ProcessorManufacturerType ProcessorManufacturer;
     static IntelProcessorType IntelProcessor;
@@ -287,7 +277,7 @@ class CPUIDStruct
 public:
     CPUIDStruct(uint32_t cpuid_type)
     {
-        if ( !CPUDetectClass::Has_CPUID_Instruction() ) {
+        if (!CPUDetectClass::Has_CPUID_Instruction()) {
             eax = ebx = ecx = edx = 0;
 
             return;
@@ -307,7 +297,7 @@ class CPUIDCountStruct
 public:
     CPUIDCountStruct(uint32_t cpuid_type, uint32_t count)
     {
-        if ( !CPUDetectClass::Has_CPUID_Instruction() ) {
+        if (!CPUDetectClass::Has_CPUID_Instruction()) {
             eax = ebx = ecx = edx = 0;
 
             return;
@@ -321,5 +311,3 @@ public:
     uint32_t ecx;
     uint32_t edx;
 };
-
-#endif // CPUDETECT_H

@@ -9,20 +9,18 @@
  *            modify it under the terms of the GNU General Public License
  *            as published by the Free Software Foundation, either version
  *            2 of the License, or (at your option) any later version.
- *
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
 #include "stackdump.h"
+#include "cpudetect.h"
 #include "main.h"
-#include "stringex.h"
+#include <captainslog.h>
 #include <cinttypes>
 #include <stdio.h>
 
-#ifndef THYME_STANDALONE
-AsciiString &g_exceptionFileBuffer = Make_Global<AsciiString>(0x00A29FB8);
-#else
-AsciiString g_exceptionFileBuffer;
+#ifndef GAME_DLL
+Utf8String g_exceptionFileBuffer;
 #endif
 
 #ifdef PLATFORM_WINDOWS
@@ -81,8 +79,7 @@ const char *g_errorCodes[22] = {
     "Error code: ?????\r\r\nDescription: Unknown exception.",
 };
 
-unsigned int g_errorValues[] = {
-    0xC0000005,
+unsigned int g_errorValues[] = { 0xC0000005,
     0xC000008C,
     0x80000003,
     0x80000002,
@@ -102,13 +99,110 @@ unsigned int g_errorValues[] = {
     0xC0000096,
     0x80000004,
     0xC00000FD,
-    0xFFFFFFFF
-};
+    0xFFFFFFFF };
 
 static bool g_symbolInit;
 static CONTEXT g_stackContext;
-typedef BOOL(__stdcall *symgetlinefromaddrfunc_t)(HANDLE, DWORD, PDWORD, PIMAGEHLP_LINE);
-static symgetlinefromaddrfunc_t g_symGetLineFromAddrFunc;
+
+#if defined PROCESSOR_X86_64
+static BOOL(__stdcall *SymCleanupPtr)(HANDLE);
+static BOOL(__stdcall *SymGetSymFromAddrPtr)(HANDLE, DWORD64, PDWORD64, PIMAGEHLP_SYMBOL64);
+static BOOL(__stdcall *SymInitializePtr)(HANDLE, PCSTR, BOOL);
+static DWORD64(__stdcall *SymLoadModulePtr)(HANDLE, HANDLE, PCSTR, PCSTR, DWORD64, DWORD);
+static DWORD(__stdcall *SymSetOptionsPtr)(DWORD);
+static BOOL(__stdcall *SymUnloadModulePtr)(HANDLE, DWORD64);
+static BOOL(__stdcall *StackWalkPtr)(DWORD,
+    HANDLE,
+    HANDLE,
+    LPSTACKFRAME,
+    PVOID,
+    PREAD_PROCESS_MEMORY_ROUTINE,
+    PFUNCTION_TABLE_ACCESS_ROUTINE,
+    PGET_MODULE_BASE_ROUTINE,
+    PTRANSLATE_ADDRESS_ROUTINE);
+static PVOID(__stdcall *SymFunctionTableAccessPtr)(HANDLE, DWORD64);
+static BOOL(__stdcall *SymGetLineFromAddrPtr)(HANDLE, DWORD64, PDWORD, PIMAGEHLP_LINE64);
+static DWORD64(__stdcall *SymGetModuleBasePtr)(HANDLE, DWORD64);
+#elif defined PROCESSOR_X86
+static BOOL(__stdcall *SymCleanupPtr)(HANDLE);
+static BOOL(__stdcall *SymGetSymFromAddrPtr)(HANDLE, DWORD, PDWORD, PIMAGEHLP_SYMBOL);
+static BOOL(__stdcall *SymInitializePtr)(HANDLE, PCSTR, BOOL);
+static DWORD(__stdcall *SymLoadModulePtr)(HANDLE, HANDLE, PCSTR, PCSTR, DWORD, DWORD);
+static DWORD(__stdcall *SymSetOptionsPtr)(DWORD);
+static BOOL(__stdcall *SymUnloadModulePtr)(HANDLE, DWORD);
+static BOOL(__stdcall *StackWalkPtr)(DWORD,
+    HANDLE,
+    HANDLE,
+    LPSTACKFRAME,
+    PVOID,
+    PREAD_PROCESS_MEMORY_ROUTINE,
+    PFUNCTION_TABLE_ACCESS_ROUTINE,
+    PGET_MODULE_BASE_ROUTINE,
+    PTRANSLATE_ADDRESS_ROUTINE);
+static PVOID(__stdcall *SymFunctionTableAccessPtr)(HANDLE, DWORD);
+static BOOL(__stdcall *SymGetLineFromAddrPtr)(HANDLE, DWORD, PDWORD, PIMAGEHLP_LINE);
+static DWORD(__stdcall *SymGetModuleBasePtr)(HANDLE, DWORD);
+#endif
+
+static void Init_DbgHelp()
+{
+#if defined PROCESSOR_X86_64
+    static const char *_sym_functions[] = { "SymCleanup",
+        "SymGetSymFromAddr64",
+        "SymInitialize",
+        "SymLoadModule64",
+        "SymSetOptions",
+        "SymUnloadModule64",
+        "StackWalk",
+        "SymFunctionTableAccess64",
+        "SymGetLineFromAddr64",
+        "SymGetModuleBase64" };
+#elif defined PROCESSOR_X86
+    static const char *_sym_functions[] = { "SymCleanup",
+        "SymGetSymFromAddr",
+        "SymInitialize",
+        "SymLoadModule",
+        "SymSetOptions",
+        "SymUnloadModule",
+        "StackWalk",
+        "SymFunctionTableAccess",
+        "SymGetLineFromAddr",
+        "SymGetModuleBase" };
+#endif
+
+    static FARPROC *_sym_pointers[] = { (FARPROC *)&SymCleanupPtr,
+        (FARPROC *)&SymGetSymFromAddrPtr,
+        (FARPROC *)&SymInitializePtr,
+        (FARPROC *)&SymLoadModulePtr,
+        (FARPROC *)&SymSetOptionsPtr,
+        (FARPROC *)&SymUnloadModulePtr,
+        (FARPROC *)&StackWalkPtr,
+        (FARPROC *)&SymFunctionTableAccessPtr,
+        (FARPROC *)&SymGetLineFromAddrPtr,
+        (FARPROC *)&SymGetModuleBasePtr };
+
+    static bool _initialised = false;
+
+    if (_initialised) {
+        return;
+    }
+
+    _initialised = true;
+
+    HMODULE dll_handle = LoadLibraryA("dbghelp.dll");
+
+    if (dll_handle) {
+        for (int i = 0; i < ARRAY_SIZE(_sym_pointers); ++i) {
+            *_sym_pointers[i] = GetProcAddress(dll_handle, _sym_functions[i]);
+
+            if (*_sym_pointers[i] == nullptr) {
+                captainslog_debug("Exception Handler: Unable to load %s from dbghelp.dll.", _sym_functions[i]);
+            }
+        }
+    } else {
+        captainslog_debug("Exception Handler: Unable to load dbghelp.dll.");
+    }
+}
 
 static void Get_Function_Details(void *pointer, char *name, char *filename, unsigned *linenumber, uintptr_t *address)
 {
@@ -133,18 +227,20 @@ static void Get_Function_Details(void *pointer, char *name, char *filename, unsi
 
     HANDLE process = GetCurrentProcess();
     char symbol_buffer[sizeof(IMAGEHLP_SYMBOL) + STACK_SYMNAME_MAX];
-    IMAGEHLP_SYMBOL *const symbol_bufferp = reinterpret_cast<IMAGEHLP_SYMBOL*>(symbol_buffer);
+    IMAGEHLP_SYMBOL *const symbol_bufferp = reinterpret_cast<IMAGEHLP_SYMBOL *>(symbol_buffer);
     memset(symbol_buffer, 0, sizeof(symbol_buffer));
     symbol_bufferp->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL) + STACK_SYMNAME_MAX;
     symbol_bufferp->MaxNameLength = STACK_SYMNAME_MAX;
 
-    if (SymGetSymFromAddr(process, reinterpret_cast<DWORD>(pointer), reinterpret_cast<PDWORD>(&displacement), symbol_bufferp)) {
+    if (SymGetSymFromAddrPtr != nullptr
+        && SymGetSymFromAddrPtr(
+            process, reinterpret_cast<DWORD_PTR>(pointer), reinterpret_cast<PDWORD_PTR>(&displacement), symbol_bufferp)) {
         if (name != nullptr) {
             strcpy(name, symbol_bufferp->Name);
             strcat(name, "();");
         }
 
-        if (g_symGetLineFromAddrFunc != nullptr) {
+        if (SymGetLineFromAddrPtr != nullptr) {
             IMAGEHLP_LINE line;
             line.Key = 0;
             line.LineNumber = 0;
@@ -152,7 +248,8 @@ static void Get_Function_Details(void *pointer, char *name, char *filename, unsi
             line.FileName = 0;
             line.Address = 0;
 
-            if (g_symGetLineFromAddrFunc(process, reinterpret_cast<DWORD>(pointer), reinterpret_cast<PDWORD>(&displacement), &line)) {
+            if (SymGetLineFromAddrPtr(
+                    process, reinterpret_cast<DWORD_PTR>(pointer), reinterpret_cast<PDWORD>(&displacement), &line)) {
                 if (filename != nullptr) {
                     strcpy(filename, line.FileName);
                 }
@@ -180,7 +277,6 @@ static void Write_Stack_Line(void *address, void(__cdecl *callback)(const char *
 
     Get_Function_Details(address, funcname, filename, &line, &addr);
     sprintf(dest, "  %s(%d) : %s 0x%" PRIPTRSIZE PRIXPTR "\n", filename, line, funcname, (uintptr_t)address);
-    g_exceptionFileBuffer += dest;
     callback(dest);
 }
 
@@ -188,7 +284,10 @@ void Uninit_Symbol_Info()
 {
     if (g_symbolInit) {
         g_symbolInit = false;
-        SymCleanup(GetCurrentProcess());
+
+        if (SymCleanupPtr != nullptr) {
+            SymCleanupPtr(GetCurrentProcess());
+        }
     }
 }
 
@@ -204,35 +303,41 @@ BOOL Init_Symbol_Info()
 
     g_symbolInit = true;
     atexit(Uninit_Symbol_Info);
-    g_symGetLineFromAddrFunc =
-        (symgetlinefromaddrfunc_t)GetProcAddress(GetModuleHandleA("dbghelp.dll"), "SymGetLineFromAddr");
-    SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_OMAP_FIND_NEAREST);
-    HANDLE process = GetCurrentProcess();
-    GetModuleFileNameA(0, pathname, PATH_MAX);
-    _splitpath(pathname, drive, directory, 0, 0);
-    sprintf(pathname, "%s:\\%s", drive, directory);
-    strcat(pathname, ";.;");
+    Init_DbgHelp();
 
-    if (SymInitialize(process, pathname, 0)) {
+    if (SymSetOptionsPtr != nullptr) {
+        SymSetOptionsPtr(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_OMAP_FIND_NEAREST);
+        HANDLE process = GetCurrentProcess();
         GetModuleFileNameA(0, pathname, PATH_MAX);
+        _splitpath(pathname, drive, directory, 0, 0);
+        sprintf(pathname, "%s:\\%s", drive, directory);
+        strcat(pathname, ";.;");
 
-        if (SymLoadModule(process, 0, pathname, 0, 0, 0)) {
-            return true;
+        if (SymInitializePtr != nullptr && SymInitializePtr(process, pathname, 0)) {
+            GetModuleFileNameA(0, pathname, PATH_MAX);
+
+            if (SymLoadModulePtr != nullptr && SymLoadModulePtr(process, 0, pathname, 0, 0, 0)) {
+                return true;
+            }
+
+            if (SymCleanupPtr != nullptr) {
+                SymCleanupPtr(process);
+            }
         }
-
-        SymCleanup(process);
     }
 
     return false;
 }
 
-void Make_Stack_Trace(uintptr_t myeip, uintptr_t myesp, uintptr_t myebp, int skip_frames, void (*callback)(char const *))
+void Make_Stack_Trace(
+    uintptr_t myeip, uintptr_t myesp, uintptr_t myebp, int skip_frames, void(__cdecl *callback)(char const *))
 {
     BOOL carry_on = true;
     STACKFRAME stack_frame;
     HANDLE thread = GetCurrentThread();
     HANDLE process = GetCurrentProcess();
 
+    Init_DbgHelp();
     memset(&g_stackContext, 0, sizeof(g_stackContext));
     memset(&stack_frame, 0, sizeof(stack_frame));
 
@@ -245,49 +350,51 @@ void Make_Stack_Trace(uintptr_t myeip, uintptr_t myesp, uintptr_t myebp, int ski
     stack_frame.AddrStack.Offset = myesp;
     stack_frame.AddrFrame.Offset = myebp;
 
-    callback("Call Stack\n**********\n");
+    callback("Call Stack:\n");
 
-    while (skip_frames-- != 0) {
-        carry_on = StackWalk(IMAGE_FILE_MACHINE_I386,
-            process,
-            thread,
-            &stack_frame,
-            nullptr,
-            nullptr,
-            SymFunctionTableAccess,
-            SymGetModuleBase,
-            nullptr);
+    if (StackWalkPtr != nullptr) {
+        while (skip_frames-- != 0) {
+            carry_on = StackWalkPtr(IMAGE_FILE_MACHINE_I386,
+                process,
+                thread,
+                &stack_frame,
+                nullptr,
+                nullptr,
+                SymFunctionTableAccessPtr,
+                SymGetModuleBasePtr,
+                nullptr);
 
-        if (!carry_on) {
-            break;
+            if (!carry_on) {
+                break;
+            }
         }
-    }
 
-    for (int i = 0; carry_on && i < STACK_DEPTH_MAX; ++i) {
-        carry_on = StackWalk(IMAGE_FILE_MACHINE_I386,
-            process,
-            thread,
-            &stack_frame,
-            nullptr,
-            nullptr,
-            SymFunctionTableAccess,
-            SymGetModuleBase,
-            nullptr);
+        for (int i = 0; carry_on && i < STACK_DEPTH_MAX; ++i) {
+            carry_on = StackWalkPtr(IMAGE_FILE_MACHINE_I386,
+                process,
+                thread,
+                &stack_frame,
+                nullptr,
+                nullptr,
+                SymFunctionTableAccessPtr,
+                SymGetModuleBasePtr,
+                nullptr);
 
-        if (carry_on) {
-            Write_Stack_Line((void*)stack_frame.AddrPC.Offset, callback);
+            if (carry_on) {
+                Write_Stack_Line((void *)stack_frame.AddrPC.Offset, callback);
+            }
         }
     }
 }
 
-void Stack_Dump_Handler(const char *data)
+void __cdecl Stack_Dump_Handler(const char *data)
 {
     g_exceptionFileBuffer += data;
 }
 
-void Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info)
+void __cdecl Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info)
 {
-    AsciiString tmp;
+    Utf8String tmp;
     g_exceptionFileBuffer.Clear();
     unsigned int e_code = e_info->ExceptionRecord->ExceptionCode;
 
@@ -298,8 +405,10 @@ void Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info)
     }
 
     g_exceptionFileBuffer += tmp;
+#ifndef BUILD_EDITOR
     tmp.Format("main function at %" PRIPTRSIZE PRIXPTR "\n", main);
     g_exceptionFileBuffer += tmp;
+#endif
 
     int error_index = 0;
 
@@ -338,17 +447,27 @@ void Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info)
         g_exceptionFileBuffer += tmp;
     }
 
-    g_exceptionFileBuffer += "\nStack Walk:\n";
     Init_Symbol_Info();
 
     CONTEXT *ctext = e_info->ContextRecord;
+#if defined PROCESSOR_X86_64
+    tmp.Format("Exception occurred at %" PRIPTRSIZE PRIXPTR "\n", ctext->Rip);
+#elif defined PROCESSOR_X86
+    tmp.Format("Exception occurred at %" PRIPTRSIZE PRIXPTR "\n", ctext->Eip);
+#endif
+    g_exceptionFileBuffer += tmp;
+    g_exceptionFileBuffer += "\n";
 
 #if defined PROCESSOR_X86_64
     Make_Stack_Trace(ctext->Rip, ctext->Rsp, ctext->Rbp, 0, Stack_Dump_Handler);
 #elif defined PROCESSOR_X86
     Make_Stack_Trace(ctext->Eip, ctext->Esp, ctext->Ebp, 0, Stack_Dump_Handler);
 #endif
-
+    tmp.Format("\nCPU %s, %d Mhz, Vendor: %s\n",
+        CPUDetectClass::Get_Processor_String(),
+        CPUDetectClass::Get_Processor_Speed(),
+        CPUDetectClass::Get_Processor_Manufacturer_Name());
+    g_exceptionFileBuffer += tmp;
     g_exceptionFileBuffer += "\nDetails:\n";
     g_exceptionFileBuffer += "\nRegister dump...\n";
 
@@ -421,6 +540,22 @@ void Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info)
     g_exceptionFileBuffer += tmp;
 
     g_exceptionFileBuffer += "\nFloating point status\n";
+#if defined PROCESSOR_X86_64
+    tmp.Format("     Control word: %08x\n", ctext->FltSave.ControlWord);
+    g_exceptionFileBuffer += tmp;
+    tmp.Format("      Status word: %08x\n", ctext->FltSave.StatusWord);
+    g_exceptionFileBuffer += tmp;
+    tmp.Format("         Tag word: %08x\n", ctext->FltSave.TagWord);
+    g_exceptionFileBuffer += tmp;
+    tmp.Format("     Error Offset: %08x\n", ctext->FltSave.ErrorOffset);
+    g_exceptionFileBuffer += tmp;
+    tmp.Format("   Error Selector: %08x\n", ctext->FltSave.ErrorSelector);
+    g_exceptionFileBuffer += tmp;
+    tmp.Format("      Data Offset: %08x\n", ctext->FltSave.DataOffset);
+    g_exceptionFileBuffer += tmp;
+    tmp.Format("    Data Selector: %08x\n", ctext->FltSave.DataSelector);
+    g_exceptionFileBuffer += tmp;
+#elif defined PROCESSOR_X86
     tmp.Format("     Control word: %08x\n", ctext->FloatSave.ControlWord);
     g_exceptionFileBuffer += tmp;
     tmp.Format("      Status word: %08x\n", ctext->FloatSave.StatusWord);
@@ -435,7 +570,9 @@ void Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info)
     g_exceptionFileBuffer += tmp;
     tmp.Format("    Data Selector: %08x\n", ctext->FloatSave.DataSelector);
     g_exceptionFileBuffer += tmp;
+#endif
 
+#if defined PROCESSOR_X86
     for (int i = 0; i < 8; ++i) {
         tmp.Format("ST%d : ", i);
         g_exceptionFileBuffer += tmp;
@@ -444,10 +581,11 @@ void Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info)
             tmp.Format("%02X", ctext->FloatSave.RegisterArea[i * 10 + j]);
             g_exceptionFileBuffer += tmp;
         }
-        
-        tmp.Format("   %+#.17e\n", *reinterpret_cast<double*>(&ctext->FloatSave.RegisterArea[i * 10]));
+
+        tmp.Format("   %+#.17e\n", *reinterpret_cast<double *>(&ctext->FloatSave.RegisterArea[i * 10]));
         g_exceptionFileBuffer += tmp;
     }
+#endif
 
     g_exceptionFileBuffer += "EIP bytes dump...\n";
 
@@ -465,10 +603,10 @@ void Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info)
 
     for (int i = 32; i != 0; --i) {
         if (IsBadReadPtr(eip_pointer, 1)) {
-            strcat(scratch, "?? ");
+            strlcat_tpl(scratch, "?? ");
         } else {
             sprintf(bytestr, "%02X ", *eip_pointer);
-            strcat(scratch, bytestr);
+            strlcat_tpl(scratch, bytestr);
         }
 
         ++eip_pointer;
@@ -476,6 +614,73 @@ void Dump_Exception_Info(unsigned int u, struct _EXCEPTION_POINTERS *e_info)
 
     strcat(scratch, "\n");
     g_exceptionFileBuffer += scratch;
+    g_exceptionFileBuffer += "\nStack dump (* indicates possible code address) :\n";
+
+    uintptr_t *esp_pointer;
+    scratch[0] = '\0';
+#if defined PROCESSOR_X86_64
+    esp_pointer = reinterpret_cast<uintptr_t *>(ctext->Rsp);
+#elif defined PROCESSOR_X86
+    esp_pointer = reinterpret_cast<uintptr_t *>(ctext->Esp);
+#endif
+
+    for (int i = 0; i < 2048; ++i) {
+        // If we can't read the address we don't know where we are.
+        if (IsBadReadPtr(esp_pointer, 4)) {
+            snprintf(scratch, sizeof(scratch), "%" PRIPTRSIZE PRIXPTR ": ????????\n", (uintptr_t)esp_pointer);
+            g_exceptionFileBuffer += scratch;
+            ++esp_pointer;
+            continue;
+        }
+
+        // If we aren't in code, then we don't know where we are.
+        if (IsBadCodePtr((FARPROC)*esp_pointer)) {
+            snprintf(scratch,
+                sizeof(scratch),
+                "%" PRIPTRSIZE PRIXPTR ": %" PRIPTRSIZE PRIXPTR " DATA_PTR\n",
+                (uintptr_t)esp_pointer,
+                *esp_pointer);
+            g_exceptionFileBuffer += scratch;
+            ++esp_pointer;
+            continue;
+        }
+
+        snprintf(scratch,
+            sizeof(scratch),
+            "%" PRIPTRSIZE PRIXPTR ": %" PRIPTRSIZE PRIXPTR "",
+            (uintptr_t)esp_pointer,
+            *esp_pointer);
+        if (SymGetSymFromAddrPtr != nullptr) {
+#if defined PROCESSOR_X86_64
+            IMAGEHLP_SYMBOL64 sym;
+            sym.SizeOfStruct = 256;
+            sym.MaxNameLength = 128;
+            sym.Size = 0;
+            sym.Address = *esp_pointer;
+            DWORD64 disp;
+#elif defined PROCESSOR_X86
+            IMAGEHLP_SYMBOL sym;
+            sym.SizeOfStruct = 256;
+            sym.MaxNameLength = 128;
+            sym.Size = 0;
+            sym.Address = *esp_pointer;
+            DWORD disp;
+#endif
+            if (SymGetSymFromAddrPtr(GetCurrentProcess(), *esp_pointer, &disp, &sym) != 0) {
+                char sym_scratch[256];
+                snprintf(sym_scratch, sizeof(sym_scratch), " - %s + %" PRIPTRSIZE PRIXPTR "", sym.Name, disp);
+                strlcat_tpl(scratch, sym_scratch);
+            } else {
+                strlcat_tpl(scratch, " *");
+            }
+        } else {
+            strlcat_tpl(scratch, " *");
+        }
+
+        strlcat_tpl(scratch, "\n");
+        g_exceptionFileBuffer += scratch;
+        ++esp_pointer;
+    }
 }
 
 #endif

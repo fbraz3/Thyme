@@ -1,0 +1,86 @@
+name: linux
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+
+jobs:
+  create_release:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Create Development release
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' }}
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
+          prerelease: true
+          title: "Development Build"
+
+  build_thyme_ubuntu:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [clang, gcc]
+        os: [ubuntu-20.04, ubuntu-22.04]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Set variables
+        id: vars
+        run: |
+          if [ "${{ matrix.platform }}" = "clang" ]
+          then
+            echo "cc=clang" >> $GITHUB_OUTPUT
+            echo "cxx=clang++" >> $GITHUB_OUTPUT
+          else
+            echo "cc=gcc" >> $GITHUB_OUTPUT
+            echo "cxx=g++" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y libgtk-3-dev ninja-build libwxgtk3.0-gtk3-dev libsdl2-dev libavcodec-dev libavformat-dev libswscale-dev
+
+      - name: Install formatter
+        if: matrix.os != 'ubuntu-22.04'
+        run: |
+          sudo apt-get install -y clang-format-10
+
+      - name: Configure Thyme
+        env:
+          CC: ${{ steps.vars.outputs.cc }}
+          CXX: ${{ steps.vars.outputs.cxx }}
+        run: |
+          cmake -DBUILD_TOOLS=ON -DLOGGING=ON -DSTANDALONE=ON -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DBUILD_COVERAGE=ON -DUSE_CRASHPAD=OFF -DUSE_SANITIZER=ON -B build -G Ninja
+
+      - name: Formatting check
+        if: matrix.os != 'ubuntu-22.04'
+        env:
+          CC: ${{ steps.vars.outputs.cc }}
+          CXX: ${{ steps.vars.outputs.cxx }}
+        run: |
+          cmake --build build --target format
+          git diff --exit-code
+
+      - name: Build Thyme
+        env:
+          CC: ${{ steps.vars.outputs.cc }}
+          CXX: ${{ steps.vars.outputs.cxx }}
+        run: |
+          cmake --build build
+
+      - name: Test Thyme
+        run: |
+          cd build
+          ctest . --output-on-failure
+
+      - uses: codecov/codecov-action@v3
+        with:
+          verbose: true
+          gcov: true
